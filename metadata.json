@@ -1,0 +1,6 @@
+{
+  "name": "Visual Invoice Editor & CMS",
+  "description": "Pixel-perfect visual invoice CMS and real-time inline document editor powered by Firebase Firestore and Storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

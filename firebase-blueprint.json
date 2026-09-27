@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "Invoice": {
+      "title": "Invoice",
+      "description": "An invoice document in the visual invoice CMS",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the invoice"
+        },
+        "number": {
+          "type": "string",
+          "description": "Invoice number reference"
+        },
+        "client_name": {
+          "type": "string",
+          "description": "Client name displayed on the invoice"
+        },
+        "date": {
+          "type": "string",
+          "description": "Invoice issue date"
+        },
+        "content": {
+          "type": "object",
+          "description": "Full editable content payload of the invoice"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "number", "client_name", "date", "content"]
+    }
+  },
+  "firestore": {
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Individual invoices stored directly in Firestore without authentication"
+    }
+  }
+}
