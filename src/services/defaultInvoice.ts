@@ -8,6 +8,14 @@ export const createDefaultInvoiceContent = (): InvoiceContent => ({
     phone2: '+00 (715) 8527 000',
     title: 'PROJECT INVOICE',
   },
+  from: {
+    label: 'FROM',
+    name: 'STUDIO DESIGN CO.',
+    role: 'Creative Studio',
+    address: '820 Colorado Building, 2nd floor of LT, California',
+    phone: '+00 (123) 4567 890',
+    email: 'contact@tuddenydesaign.com',
+  },
   to: {
     label: 'TO',
     clientName: 'ALEX ARNOLD',

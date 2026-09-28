@@ -17,6 +17,15 @@ export interface InvoiceSection {
   lines: InvoiceSectionLine[];
 }
 
+export interface InvoicePartyInfo {
+  label: string;
+  name: string;
+  role: string;
+  address: string;
+  phone: string;
+  email: string;
+}
+
 export interface InvoiceContent {
   header: {
     address1: string;
@@ -25,6 +34,7 @@ export interface InvoiceContent {
     phone2: string;
     title: string;
   };
+  from?: InvoicePartyInfo;
   to: {
     label: string;
     clientName: string;

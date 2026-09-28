@@ -11,7 +11,7 @@ import {
   CreditCard,
   FileCheck2,
 } from 'lucide-react';
-import { InvoiceContent, InvoiceLineItem, InvoiceSection } from '../types';
+import { InvoiceContent, InvoiceLineItem, InvoiceSection, InvoicePartyInfo } from '../types';
 import { EditableText } from './EditableText';
 import { uploadInvoiceImage } from '../services/invoiceService';
 import { cn } from '../lib/utils';
@@ -62,11 +62,29 @@ export const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({
       ? content.grandTotalOverride
       : computedSubtotal;
 
+  const fromData: InvoicePartyInfo = content.from || {
+    label: 'FROM',
+    name: 'STUDIO DESIGN CO.',
+    role: 'Creative Studio',
+    address: '820 Colorado Building, 2nd floor of LT, California',
+    phone: '+00 (123) 4567 890',
+    email: 'contact@tuddenydesaign.com',
+  };
+
   // Helper to trigger updates with a new content state
   const updateContent = (partial: Partial<InvoiceContent>) => {
     onChange({
       ...content,
       ...partial,
+    });
+  };
+
+  const handleFromChange = (field: keyof InvoicePartyInfo, value: string) => {
+    updateContent({
+      from: {
+        ...fromData,
+        [field]: value,
+      },
     });
   };
 
@@ -89,19 +107,6 @@ export const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({
       total: '$1,000.00',
     };
     updateContent({ items: [...content.items, newItem] });
-  };
-
-  const handleAddItemBelow = (index: number) => {
-    const newItem: InvoiceLineItem = {
-      id: `item-${Date.now()}`,
-      title: 'New Service Item',
-      subtitle: 'Description / timeframe',
-      quantity: 1,
-      total: '$1,000.00',
-    };
-    const updated = [...content.items];
-    updated.splice(index + 1, 0, newItem);
-    updateContent({ items: updated });
   };
 
   const handleDeleteItem = (index: number) => {
@@ -398,95 +403,152 @@ export const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({
           )}
         </div>
 
-        {/* MIDDLE SECTION: 2-COLUMN LAYOUT (TO on left, TABLE on right) */}
+        {/* MIDDLE SECTION: 2-COLUMN LAYOUT (FROM & TO on left, TABLE on right) */}
         <div className="grid grid-cols-12 gap-8 items-start mb-10">
-          {/* LEFT: TO (Client Details in shadcn Card style) */}
-          <div className={cn(
-            "col-span-4 p-4 rounded-lg border",
-            isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-zinc-50/70 border-zinc-200/80"
-          )}>
-            <div className={cn("text-[10px] font-semibold tracking-wider uppercase mb-2", isDark ? "text-zinc-400" : "text-zinc-500")}>
-              <EditableText
-                value={content.to.label}
-                onChange={(val) =>
-                  updateContent({
-                    to: { ...content.to, label: val },
-                  })
-                }
-                className="font-semibold text-[10px] tracking-wider uppercase"
-              />
-            </div>
-
-            <div className="mb-0.5">
-              <EditableText
-                value={content.to.clientName}
-                onChange={(val) =>
-                  updateContent({
-                    to: { ...content.to, clientName: val },
-                  })
-                }
-                className={cn("font-semibold text-sm tracking-tight", isDark ? "text-zinc-100" : "text-zinc-900")}
-              />
-            </div>
-
-            <div className="mb-3">
-              <EditableText
-                value={content.to.role}
-                onChange={(val) =>
-                  updateContent({
-                    to: { ...content.to, role: val },
-                  })
-                }
-                className="text-zinc-500 text-xs font-normal"
-              />
-            </div>
-
-            <div className={cn("space-y-1 text-xs leading-relaxed border-t pt-2.5", isDark ? "border-zinc-800 text-zinc-400" : "border-zinc-200 text-zinc-600")}>
-              <div>
+          {/* LEFT: FROM & TO (Sender & Client Details in matching shadcn Card style) */}
+          <div className="col-span-4 space-y-3">
+            {/* FROM CARD */}
+            <div className={cn(
+              "p-3.5 rounded-lg border",
+              isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-zinc-50/70 border-zinc-200/80"
+            )}>
+              <div className={cn("text-[10px] font-semibold tracking-wider uppercase mb-1.5", isDark ? "text-zinc-400" : "text-zinc-500")}>
                 <EditableText
-                  value={content.to.address}
-                  onChange={(val) =>
-                    updateContent({
-                      to: { ...content.to, address: val },
-                    })
-                  }
-                  className="text-xs"
+                  value={fromData.label}
+                  onChange={(val) => handleFromChange('label', val)}
+                  className="font-semibold text-[10px] tracking-wider uppercase"
                 />
               </div>
-              <div className="font-mono text-[11px]">
+
+              <div className="mb-0.5">
                 <EditableText
-                  value={content.to.phone}
-                  onChange={(val) =>
-                    updateContent({
-                      to: { ...content.to, phone: val },
-                    })
-                  }
-                  className="text-zinc-500 text-[11px]"
+                  value={fromData.name}
+                  onChange={(val) => handleFromChange('name', val)}
+                  className={cn("font-semibold text-sm tracking-tight", isDark ? "text-zinc-100" : "text-zinc-900")}
                 />
               </div>
-              <div className="text-[11px]">
+
+              <div className="mb-2">
                 <EditableText
-                  value={content.to.email}
-                  onChange={(val) =>
-                    updateContent({
-                      to: { ...content.to, email: val },
-                    })
-                  }
-                  className="text-zinc-500 text-[11px]"
+                  value={fromData.role}
+                  onChange={(val) => handleFromChange('role', val)}
+                  className="text-zinc-500 text-xs font-normal"
                 />
+              </div>
+
+              <div className={cn("space-y-1 text-xs leading-relaxed border-t pt-2", isDark ? "border-zinc-800 text-zinc-400" : "border-zinc-200 text-zinc-600")}>
+                <div>
+                  <EditableText
+                    value={fromData.address}
+                    onChange={(val) => handleFromChange('address', val)}
+                    className="text-xs"
+                  />
+                </div>
+                <div className="font-mono text-[11px]">
+                  <EditableText
+                    value={fromData.phone}
+                    onChange={(val) => handleFromChange('phone', val)}
+                    className="text-zinc-500 text-[11px]"
+                  />
+                </div>
+                <div className="text-[11px]">
+                  <EditableText
+                    value={fromData.email}
+                    onChange={(val) => handleFromChange('email', val)}
+                    className="text-zinc-500 text-[11px]"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="mt-3 pt-2 border-t border-zinc-200 dark:border-zinc-800 font-mono text-[11px] text-zinc-500">
-              <EditableText
-                value={content.to.date}
-                onChange={(val) =>
-                  updateContent({
-                    to: { ...content.to, date: val },
-                  })
-                }
-                className="text-zinc-500 font-mono text-[11px]"
-              />
+            {/* TO CARD */}
+            <div className={cn(
+              "p-3.5 rounded-lg border",
+              isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-zinc-50/70 border-zinc-200/80"
+            )}>
+              <div className={cn("text-[10px] font-semibold tracking-wider uppercase mb-1.5", isDark ? "text-zinc-400" : "text-zinc-500")}>
+                <EditableText
+                  value={content.to.label}
+                  onChange={(val) =>
+                    updateContent({
+                      to: { ...content.to, label: val },
+                    })
+                  }
+                  className="font-semibold text-[10px] tracking-wider uppercase"
+                />
+              </div>
+
+              <div className="mb-0.5">
+                <EditableText
+                  value={content.to.clientName}
+                  onChange={(val) =>
+                    updateContent({
+                      to: { ...content.to, clientName: val },
+                    })
+                  }
+                  className={cn("font-semibold text-sm tracking-tight", isDark ? "text-zinc-100" : "text-zinc-900")}
+                />
+              </div>
+
+              <div className="mb-2">
+                <EditableText
+                  value={content.to.role}
+                  onChange={(val) =>
+                    updateContent({
+                      to: { ...content.to, role: val },
+                    })
+                  }
+                  className="text-zinc-500 text-xs font-normal"
+                />
+              </div>
+
+              <div className={cn("space-y-1 text-xs leading-relaxed border-t pt-2", isDark ? "border-zinc-800 text-zinc-400" : "border-zinc-200 text-zinc-600")}>
+                <div>
+                  <EditableText
+                    value={content.to.address}
+                    onChange={(val) =>
+                      updateContent({
+                        to: { ...content.to, address: val },
+                      })
+                    }
+                    className="text-xs"
+                  />
+                </div>
+                <div className="font-mono text-[11px]">
+                  <EditableText
+                    value={content.to.phone}
+                    onChange={(val) =>
+                      updateContent({
+                        to: { ...content.to, phone: val },
+                      })
+                    }
+                    className="text-zinc-500 text-[11px]"
+                  />
+                </div>
+                <div className="text-[11px]">
+                  <EditableText
+                    value={content.to.email}
+                    onChange={(val) =>
+                      updateContent({
+                        to: { ...content.to, email: val },
+                      })
+                    }
+                    className="text-zinc-500 text-[11px]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-2.5 pt-2 border-t border-zinc-200 dark:border-zinc-800 font-mono text-[11px] text-zinc-500">
+                <EditableText
+                  value={content.to.date}
+                  onChange={(val) =>
+                    updateContent({
+                      to: { ...content.to, date: val },
+                    })
+                  }
+                  className="text-zinc-500 font-mono text-[11px]"
+                />
+              </div>
             </div>
           </div>
 
@@ -577,21 +639,6 @@ export const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({
                         title="Move down"
                       >
                         <ChevronDown className="w-3 h-3" />
-                      </button>
-
-                      {/* ADD ITEM BELOW BUTTON */}
-                      <button
-                        onClick={() => handleAddItemBelow(index)}
-                        className={cn(
-                          "h-6 px-1.5 flex items-center gap-0.5 rounded border text-[11px] font-medium transition-colors cursor-pointer",
-                          isDark
-                            ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-                            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
-                        )}
-                        title="Add new line item below"
-                      >
-                        <Plus className="w-3 h-3 text-zinc-500" />
-                        <span>Add</span>
                       </button>
 
                       {/* REMOVE ITEM BUTTON */}

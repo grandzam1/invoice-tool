@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   FileText,
@@ -15,6 +15,10 @@ import {
   CheckCircle2,
   Clock,
   MoreHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  Check,
 } from 'lucide-react';
 import { InvoiceDocument } from '../types';
 import { parseCurrencyAmount, formatCurrencyAmount } from './InvoiceCanvas';
@@ -40,6 +44,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const ITEMS_PER_PAGE = 7;
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const filteredInvoices = invoices.filter((inv) => {
     const term = searchTerm.toLowerCase();
@@ -48,6 +61,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const date = (inv.date || '').toLowerCase();
     return num.includes(term) || client.includes(term) || date.includes(term);
   });
+
+  // Pagination calculation
+  const totalItems = filteredInvoices.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+  const activePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const startIndex = (activePage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+  const displayedInvoices = filteredInvoices.slice(startIndex, endIndex);
+
+  const startItem = totalItems === 0 ? 0 : startIndex + 1;
+  const endItem = endIndex;
 
   const getInvoiceTotal = (inv: InvoiceDocument): string => {
     if (inv.content?.grandTotalOverride) {
@@ -76,55 +101,136 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="w-full h-full bg-[#09090b] text-zinc-100 flex flex-col overflow-y-auto">
       {/* Top Minimal Navigation Bar (shadcn style) */}
-      <header className="border-b border-zinc-800 bg-[#09090b]/80 backdrop-blur-sm sticky top-0 z-20 px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <header className="border-b border-zinc-800 bg-[#09090b]/80 backdrop-blur-sm sticky top-0 z-30 px-4 md:px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <div className="w-8 h-8 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100 shadow-xs">
             <FileText className="w-4 h-4 text-zinc-200" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-sm font-semibold text-zinc-100 tracking-tight">Invoices</span>
-            <span className="text-xs font-normal text-zinc-500 font-mono">/ CMS</span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-800">
+            <span className="hidden sm:inline text-xs font-normal text-zinc-500 font-mono">/ CMS</span>
+            <span className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-800">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Firestore
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <div className="flex items-center border border-zinc-800 rounded-md p-0.5 bg-zinc-950">
-            <button
-              onClick={() => setViewMode('list')}
-              className={cn(
-                'p-1.5 rounded-xs transition-colors',
-                viewMode === 'list'
-                  ? 'bg-zinc-800 text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              )}
-              title="Minimal Table List"
-            >
-              <LayoutList className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={cn(
-                'p-1.5 rounded-xs transition-colors',
-                viewMode === 'grid'
-                  ? 'bg-zinc-800 text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              )}
-              title="Grid Cards"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
+          {/* Desktop Secondary Buttons: Visible on desktop (md: and up) */}
+          <div className="hidden md:flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex items-center border border-zinc-800 rounded-md p-0.5 bg-zinc-950">
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'p-1.5 rounded-xs transition-colors cursor-pointer',
+                  viewMode === 'list'
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                )}
+                title="Minimal Table List"
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'p-1.5 rounded-xs transition-colors cursor-pointer',
+                  viewMode === 'grid'
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                )}
+                title="Grid Cards"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
+          {/* Mobile Secondary Menu: Collapsed into a menu icon on mobile screens (< md:) */}
+          <div className="relative md:hidden">
+            <button
+              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              className={cn(
+                'h-8 w-8 inline-flex items-center justify-center rounded-md border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer',
+                isMobileMenuOpen && 'bg-zinc-800 text-zinc-100'
+              )}
+              title="Secondary options"
+              aria-label="Secondary options"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+
+            {isMobileMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-2xs"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-10 z-50 w-48 bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl p-1.5 space-y-1">
+                  <div className="px-2 py-1 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                    View Layout
+                  </div>
+                  <button
+                    onClick={() => {
+                      setViewMode('list');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={cn(
+                      'w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer',
+                      viewMode === 'list'
+                        ? 'bg-zinc-800 text-zinc-100 font-medium'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <LayoutList className="w-3.5 h-3.5" />
+                      <span>Table List</span>
+                    </div>
+                    {viewMode === 'list' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode('grid');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={cn(
+                      'w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer',
+                      viewMode === 'grid'
+                        ? 'bg-zinc-800 text-zinc-100 font-medium'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      <span>Grid Cards</span>
+                    </div>
+                    {viewMode === 'grid' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                  </button>
+
+                  <div className="border-t border-zinc-800/80 my-1 pt-1">
+                    <div className="px-2.5 py-1.5 flex items-center justify-between text-[11px] text-zinc-400">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Firestore
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Sync active</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* New Invoice Button: Simple '+' on mobile screens, '+ New Invoice' on desktop (md: and up) */}
           <button
             onClick={onCreateInvoice}
-            className="inline-flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium text-xs h-8 px-3 rounded-md transition-colors shadow-xs cursor-pointer"
+            className="inline-flex items-center justify-center bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium text-xs h-8 w-8 md:w-auto md:px-3 rounded-md transition-colors shadow-xs cursor-pointer shrink-0"
+            title="Create New Invoice"
+            aria-label="New Invoice"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>New Invoice</span>
+            <Plus className="w-4 h-4 md:w-3.5 md:h-3.5" />
+            <span className="hidden md:inline ml-1.5">New Invoice</span>
           </button>
         </div>
       </header>
@@ -202,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 font-normal">
-                  {filteredInvoices.map((inv) => {
+                  {displayedInvoices.map((inv) => {
                     const totalDisplay = getInvoiceTotal(inv);
                     const isConfirming = confirmDeleteId === inv.id;
 
@@ -302,13 +408,41 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination bar under the document table when there are more than 7 items */}
+            {totalItems > 7 && (
+              <div className="border-t border-zinc-800 px-4 py-3 bg-zinc-900/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="text-xs text-zinc-400 font-normal">
+                  Showing <span className="font-medium text-zinc-200">{startItem}–{endItem}</span> of <span className="font-medium text-zinc-200">{totalItems}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={activePage === 1}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Previous</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={activePage === totalPages}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* MINIMAL GRID CARDS (shadcn Card style) */}
         {!loading && filteredInvoices.length > 0 && viewMode === 'grid' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredInvoices.map((inv) => {
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {displayedInvoices.map((inv) => {
               const totalDisplay = getInvoiceTotal(inv);
               const isConfirming = confirmDeleteId === inv.id;
 
@@ -393,6 +527,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               );
             })}
+            </div>
+
+            {/* Pagination bar under the grid when there are more than 7 items */}
+            {totalItems > 7 && (
+              <div className="border border-zinc-800 rounded-lg px-4 py-3 bg-zinc-950/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="text-xs text-zinc-400 font-normal">
+                  Showing <span className="font-medium text-zinc-200">{startItem}–{endItem}</span> of <span className="font-medium text-zinc-200">{totalItems}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={activePage === 1}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Previous</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={activePage === totalPages}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
