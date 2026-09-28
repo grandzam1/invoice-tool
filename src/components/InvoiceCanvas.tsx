@@ -279,6 +279,9 @@ export const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({
                 <img
                   src={content.logoUrl}
                   alt="Company Logo"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/public/default-logo.png';
+                  }}
                   className="h-12 max-h-14 max-w-[220px] object-contain rounded-md block shadow-2xs"
                 />
                 <div className="flex items-center gap-1 opacity-70 hover:opacity-100 focus-within:opacity-100 transition-opacity">

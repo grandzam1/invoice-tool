@@ -16,6 +16,9 @@ import {
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
 import { InvoiceDocument } from '../types';
 import { createNewInvoice } from './defaultInvoice';
+import { autoPopulateSeedDataIfEmpty, runConnectionSelfTest, seedInvoices } from './seed';
+
+export { autoPopulateSeedDataIfEmpty, runConnectionSelfTest, seedInvoices };
 
 const COLLECTION_NAME = 'invoices';
 const LOCAL_STORAGE_KEY = 'visual_invoice_cms_cache';
@@ -185,12 +188,25 @@ export async function uploadInvoiceImage(
   file: File,
   type: 'logo' | 'signature'
 ): Promise<string> {
+  const localImageKey = `visual_invoice_img_${invoiceId}_${type}`;
   // Read file as base64 data URL first so it's always ready immediately
-  const dataUrlPromise = new Promise<string>((resolve, reject) => {
+  const dataUrlPromise = new Promise<string>((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (e) => reject(e);
-    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = (reader.result as string) || '/public/default-logo.png';
+      try {
+        localStorage.setItem(localImageKey, result);
+      } catch {
+        // Ignore quota
+      }
+      resolve(result);
+    };
+    reader.onerror = () => resolve('/public/default-logo.png');
+    try {
+      reader.readAsDataURL(file);
+    } catch {
+      resolve('/public/default-logo.png');
+    }
   });
 
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -207,7 +223,7 @@ export async function uploadInvoiceImage(
         });
         const downloadUrl = await getDownloadURL(uploadResult.ref);
         clearTimeout(timer);
-        resolve(downloadUrl);
+        resolve(downloadUrl || '/public/default-logo.png');
       } catch (e) {
         clearTimeout(timer);
         reject(e);
@@ -223,22 +239,13 @@ export async function uploadInvoiceImage(
 
 export async function seedInitialInvoiceIfEmpty(): Promise<InvoiceDocument> {
   try {
-    const existing = await getInvoices();
-    if (existing.length > 0) {
-      return existing[0];
+    const seeded = await autoPopulateSeedDataIfEmpty();
+    if (seeded && seeded.length > 0) {
+      return seeded[0];
     }
-    const defaultDoc = createNewInvoice('INV-2021-001');
-    setLocalCache([defaultDoc]);
-    try {
-      await setDoc(doc(db, COLLECTION_NAME, defaultDoc.id), defaultDoc);
-    } catch (e) {
-      console.warn('Could not write seed to remote Firestore:', e);
-    }
-    return defaultDoc;
+    return seedInvoices[0] || createNewInvoice('INV-2021-001');
   } catch (error) {
-    console.warn('Could not seed or query invoices, returning local default:', error);
-    const defaultDoc = createNewInvoice('INV-2021-001');
-    setLocalCache([defaultDoc]);
-    return defaultDoc;
+    console.warn('Could not auto-populate seed invoices, returning local default:', error);
+    return seedInvoices[0] || createNewInvoice('INV-2021-001');
   }
 }

@@ -32,6 +32,8 @@ import {
   duplicateInvoice,
   deleteInvoice,
   seedInitialInvoiceIfEmpty,
+  autoPopulateSeedDataIfEmpty,
+  runConnectionSelfTest,
 } from './services/invoiceService';
 import { InvoiceCanvas, parseCurrencyAmount, formatCurrencyAmount } from './components/InvoiceCanvas';
 import { Dashboard } from './components/Dashboard';
@@ -74,22 +76,21 @@ export default function App() {
   const [zoomMode, setZoomMode] = useState<'fit' | 'custom'>('fit');
   const [customZoom, setCustomZoom] = useState<number>(1);
 
-  // Load initial invoices from Firestore
+  // Load initial invoices from Firestore or Seed Auto-Population
   const loadInvoices = useCallback(async () => {
     setLoading(true);
     try {
       let list = await getInvoices();
       if (list.length === 0) {
-        // Seed default invoice from screenshot
-        const seeded = await seedInitialInvoiceIfEmpty();
-        list = [seeded];
+        // Auto-populate 2–3 complete sample invoices when database is empty
+        list = await autoPopulateSeedDataIfEmpty();
       }
       setInvoices(list);
       setErrorMessage(null);
     } catch (err: any) {
       console.warn('Network delay loading remote invoices, fallback to seed:', err);
-      const seeded = await seedInitialInvoiceIfEmpty();
-      setInvoices([seeded]);
+      const seeded = await autoPopulateSeedDataIfEmpty();
+      setInvoices(seeded);
     } finally {
       setLoading(false);
     }
@@ -97,6 +98,8 @@ export default function App() {
 
   useEffect(() => {
     loadInvoices();
+    // Phase 2.3: Non-blocking connection self-test against Firestore and Cloud Storage
+    runConnectionSelfTest();
   }, [loadInvoices]);
 
   // Dynamically observe and measure canvas height as content expands
