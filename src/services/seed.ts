@@ -90,6 +90,7 @@ export const seedInvoices: InvoiceDocument[] = [
       ],
       signature: {
         imageUrl: '',
+        originalImageUrl: '',
         signeeName: 'Anthouny Bourdain',
         signeeRole: 'Ceo & Founder',
       },
@@ -100,7 +101,7 @@ export const seedInvoices: InvoiceDocument[] = [
       footer: {
         website: 'WWW.STUDIODESIGN.CO',
       },
-      logoUrl: '/public/default-logo.png',
+      logoUrl: '/spacex-logo.svg',
     },
   },
   {
@@ -174,6 +175,7 @@ export const seedInvoices: InvoiceDocument[] = [
       ],
       signature: {
         imageUrl: '',
+        originalImageUrl: '',
         signeeName: 'Marcus Vance',
         signeeRole: 'Principal Architect',
       },
@@ -184,7 +186,7 @@ export const seedInvoices: InvoiceDocument[] = [
       footer: {
         website: 'WWW.CLOUDSYSTEMSLABS.IO',
       },
-      logoUrl: '/public/default-logo.png',
+      logoUrl: '/spacex-logo.svg',
     },
   },
   {
@@ -251,6 +253,7 @@ export const seedInvoices: InvoiceDocument[] = [
       ],
       signature: {
         imageUrl: '',
+        originalImageUrl: '',
         signeeName: 'Elena Rostova',
         signeeRole: 'Senior Managing Director',
       },
@@ -261,7 +264,7 @@ export const seedInvoices: InvoiceDocument[] = [
       footer: {
         website: 'WWW.HORIZONANALYTICS.ORG',
       },
-      logoUrl: '/public/default-logo.png',
+      logoUrl: '/spacex-logo.svg',
     },
   },
 ];

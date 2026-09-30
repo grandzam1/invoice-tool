@@ -186,7 +186,7 @@ export async function deleteInvoice(id: string): Promise<void> {
 export async function uploadInvoiceImage(
   invoiceId: string,
   file: File,
-  type: 'logo' | 'signature'
+  type: 'logo' | 'signature' | 'signature-original'
 ): Promise<string> {
   const localImageKey = `visual_invoice_img_${invoiceId}_${type}`;
   // Read file as base64 data URL first so it's always ready immediately

@@ -1,5 +1,8 @@
 import { InvoiceContent, InvoiceDocument } from '../types';
 
+/** Stored on every new invoice so the SpaceX mark is part of the document, not only the template. */
+export const DEFAULT_LOGO_URL = '/spacex-logo.svg';
+
 export const createDefaultInvoiceContent = (): InvoiceContent => ({
   header: {
     address1: '820 Colorado Building',
@@ -79,6 +82,7 @@ export const createDefaultInvoiceContent = (): InvoiceContent => ({
   ],
   signature: {
     imageUrl: '', // default uses the handwritten font rendering of Anthony Bourdain
+    originalImageUrl: '',
     signeeName: 'Anthouny Bourdain',
     signeeRole: 'Ceo & Founder',
   },
@@ -89,7 +93,7 @@ export const createDefaultInvoiceContent = (): InvoiceContent => ({
   footer: {
     website: 'WWW.TUDDENYDESAIGN.COM',
   },
-  logoUrl: '',
+  logoUrl: DEFAULT_LOGO_URL,
 });
 
 export const createNewInvoice = (numberStr = 'INV-2021-001'): InvoiceDocument => {

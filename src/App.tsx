@@ -25,6 +25,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { InvoiceDocument, InvoiceContent } from './types';
+import { EditorMode, readEditorMode, writeEditorMode } from './config/editorMode';
 import {
   getInvoices,
   saveInvoice,
@@ -36,11 +37,43 @@ import {
   runConnectionSelfTest,
 } from './services/invoiceService';
 import { InvoiceCanvas, parseCurrencyAmount, formatCurrencyAmount } from './components/InvoiceCanvas';
+import { TemplatePreview, TemplatePreviewHandle } from './components/TemplatePreview';
+import { Editor2Host } from './components/Editor2Host';
+import { EditorSettings } from './components/EditorSettings';
 import { Dashboard } from './components/Dashboard';
 import { cn } from './lib/utils';
 
 const DESIGN_WIDTH = 800;
 const DESIGN_MIN_HEIGHT = 1130;
+
+type HistorySnapshot = {
+  content: InvoiceContent;
+  editor2?: InvoiceDocument['editor2'];
+  number: string;
+  client_name: string;
+  date: string;
+};
+
+function snapshotOf(invoice: InvoiceDocument): HistorySnapshot {
+  return {
+    content: invoice.content,
+    editor2: invoice.editor2,
+    number: invoice.number,
+    client_name: invoice.client_name,
+    date: invoice.date,
+  };
+}
+
+function withSnapshot(invoice: InvoiceDocument, snapshot: HistorySnapshot): InvoiceDocument {
+  return {
+    ...invoice,
+    content: snapshot.content,
+    editor2: snapshot.editor2,
+    number: snapshot.number,
+    client_name: snapshot.client_name,
+    date: snapshot.date,
+  };
+}
 
 export default function App() {
   // Navigation: 'dashboard' | 'editor'
@@ -59,14 +92,17 @@ export default function App() {
   // Delete modal state
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isEditorMenuOpen, setIsEditorMenuOpen] = useState(false);
+  const [templatePreviewOpen, setTemplatePreviewOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<EditorMode>(() => readEditorMode());
+  const previewRef = useRef<TemplatePreviewHandle>(null);
 
   // Save status
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Undo / Redo history for current invoice content
-  const [undoStack, setUndoStack] = useState<InvoiceContent[]>([]);
-  const [redoStack, setRedoStack] = useState<InvoiceContent[]>([]);
+  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
 
   // Viewport scaling & dynamic height
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
@@ -181,7 +217,7 @@ export default function App() {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleOrientation);
     };
-  }, [currentView, calculateScale, isSidebarOpen]);
+  }, [currentView, calculateScale, isSidebarOpen, editorMode]);
 
   // Switch to Invoice Editor and reset undo/redo stacks
   const handleOpenInvoice = (invoiceId: string) => {
@@ -288,8 +324,8 @@ export default function App() {
   const handleContentChange = (newContent: InvoiceContent) => {
     if (!currentInvoice) return;
 
-    // Push previous content state to undo stack
-    setUndoStack((prev) => [...prev.slice(-40), currentInvoice.content]);
+    // Push previous document state so editor2 tax and items survive undo
+    setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
     setRedoStack([]); // Clear redo stack on new edit
 
     setCurrentInvoice((prev) => (prev ? { ...prev, content: newContent } : null));
@@ -309,9 +345,9 @@ export default function App() {
     const previous = undoStack[undoStack.length - 1];
     const newUndoStack = undoStack.slice(0, -1);
 
-    setRedoStack((prev) => [...prev, currentInvoice.content]);
+    setRedoStack((prev) => [...prev, snapshotOf(currentInvoice)]);
     setUndoStack(newUndoStack);
-    setCurrentInvoice((prev) => (prev ? { ...prev, content: previous } : null));
+    setCurrentInvoice((prev) => (prev ? withSnapshot(prev, previous) : null));
     setSaveStatus('dirty');
   }, [undoStack, currentInvoice]);
 
@@ -321,9 +357,9 @@ export default function App() {
     const next = redoStack[redoStack.length - 1];
     const newRedoStack = redoStack.slice(0, -1);
 
-    setUndoStack((prev) => [...prev, currentInvoice.content]);
+    setUndoStack((prev) => [...prev, snapshotOf(currentInvoice)]);
     setRedoStack(newRedoStack);
-    setCurrentInvoice((prev) => (prev ? { ...prev, content: next } : null));
+    setCurrentInvoice((prev) => (prev ? withSnapshot(prev, next) : null));
     setSaveStatus('dirty');
   }, [redoStack, currentInvoice]);
 
@@ -354,8 +390,25 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentView, handleUndo, handleRedo, currentInvoice]);
 
-  // Print invoice
+  const handleEditor2Change = (next: InvoiceDocument) => {
+    if (!currentInvoice) return;
+    setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
+    setRedoStack([]);
+    setCurrentInvoice(next);
+    setSaveStatus('dirty');
+  };
+
+  const handleEditorModeChange = (next: EditorMode) => {
+    setEditorMode(next);
+    writeEditorMode(next);
+  };
+
+  // Print invoice. Editor 2 prints the preview iframe; classic prints the canvas.
   const handlePrint = () => {
+    if (editorMode === 'editor2') {
+      previewRef.current?.print();
+      return;
+    }
     window.print();
   };
 
@@ -368,7 +421,7 @@ export default function App() {
   });
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-[#09090b] overflow-hidden text-zinc-100 select-none">
+    <div className={cn('w-screen h-screen flex flex-col bg-[#09090b] overflow-hidden text-zinc-100 select-none', editorMode === 'editor2' && 'editor-mode-editor2')}>
       {/* Toast Error Banner */}
       {errorMessage && (
         <div className="bg-red-950/90 border-b border-red-800 text-red-200 text-xs py-2 px-4 flex items-center justify-between z-50">
@@ -516,6 +569,19 @@ export default function App() {
 
             {/* Right Controls: Desktop all inline / Mobile Save + ... overflow menu */}
             <div className="flex items-center gap-1.5">
+              <EditorSettings
+                value={editorMode}
+                onChange={handleEditorModeChange}
+                className="hidden md:inline-flex"
+              />
+              <button
+                type="button"
+                onClick={() => setTemplatePreviewOpen((prev) => !prev)}
+                className="lg:hidden h-8 px-2.5 text-xs font-medium rounded-md inline-flex items-center border border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                aria-pressed={templatePreviewOpen}
+              >
+                {templatePreviewOpen ? 'Close preview' : 'Preview'}
+              </button>
               {/* Mobile Save Button (visible on mobile only, beside the ... menu icon) */}
               <button
                 onClick={handleSaveCurrentInvoice}
@@ -638,6 +704,17 @@ export default function App() {
                       onClick={() => setIsEditorMenuOpen(false)}
                     />
                     <div className="absolute right-0 top-10 z-50 w-60 bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl p-2 space-y-2">
+                      <div className="px-2.5 py-1.5 bg-zinc-900/60 rounded-md border border-zinc-800/80">
+                        <EditorSettings
+                          value={editorMode}
+                          onChange={(mode) => {
+                            handleEditorModeChange(mode);
+                            setIsEditorMenuOpen(false);
+                          }}
+                          className="w-full justify-between"
+                        />
+                      </div>
+
                       {/* Status indicator inside overflow menu */}
                       <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-900/60 rounded-md border border-zinc-800/80 text-xs">
                         <span className="text-zinc-400">Status</span>
@@ -867,6 +944,7 @@ export default function App() {
             <div
               id="invoice-viewport-wrapper"
               ref={viewportWrapperRef}
+              style={editorMode === 'editor2' ? { display: 'none' } : undefined}
               className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden flex justify-center items-start py-4 sm:py-8 px-2 sm:px-4 bg-[#09090b]"
             >
               {/* The scaled box matching exact computed pixel boundaries */}
@@ -906,6 +984,28 @@ export default function App() {
                 </div>
               </div>
             </div>
+            {editorMode === 'editor2' && (
+              <Editor2Host
+                invoice={currentInvoice}
+                invoices={invoices}
+                onChange={handleEditor2Change}
+                onDuplicate={() => handleDuplicateInvoice(currentInvoice)}
+                onDelete={() => handleDeleteInvoice(currentInvoice.id)}
+                onBack={() => {
+                  if (saveStatus === 'dirty') handleSaveCurrentInvoice();
+                  setCurrentView('dashboard');
+                }}
+                onSave={handleSaveCurrentInvoice}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+              />
+            )}
+            <TemplatePreview
+              ref={previewRef}
+              invoice={currentInvoice}
+              open={templatePreviewOpen}
+              onClose={() => setTemplatePreviewOpen(false)}
+            />
           </div>
         </div>
       )}

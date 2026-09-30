@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Invoice manager</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+    --bg:#F6F6FC; --card:#FFFFFF; --ink:#1F1F2B; --muted:#6B6B80; --line:#E3E3EE;
+    --accent:#25235F; --accent-fg:#FFFFFF; --danger:#B42318; --tint:#ECECF6; --ok:#17734A; --okbg:#E1F4EA;
+  }
+  html { scroll-padding-top:env(safe-area-inset-top,0px); height:100%; }
+  @media (prefers-color-scheme:dark) {
+    :root:not([data-theme="light"]) { --bg:#111118; --card:#1A1A25; --ink:#EDEDF5; --muted:#9A9AB0; --line:#2C2C3C; --accent:#8C89FF; --accent-fg:#111118; --danger:#FF8A80; --tint:#232336; --ok:#6FD3A0; --okbg:#173326; }
+  }
+  :root[data-theme="dark"] { --bg:#111118; --card:#1A1A25; --ink:#EDEDF5; --muted:#9A9AB0; --line:#2C2C3C; --accent:#8C89FF; --accent-fg:#111118; --danger:#FF8A80; --tint:#232336; --ok:#6FD3A0; --okbg:#173326; }
+  body { background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif; -webkit-tap-highlight-color:transparent; }
+  .card{background:var(--card);border:1px solid var(--line)} .muted{color:var(--muted)}
+  .btn{height:48px;border-radius:12px;font-weight:600;font-size:15px}
+  .btn-p{background:var(--accent);color:var(--accent-fg)} .btn-s{background:var(--tint);color:var(--ink)} .btn-d{color:var(--danger)}
+  .field{width:100%;height:48px;padding:0 14px;font-size:16px;border-radius:12px;background:var(--bg);border:1px solid var(--line);color:var(--ink);outline:none}
+  textarea.field{height:auto;padding:12px 14px}
+  .field:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+  .lbl{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px;display:block}
+  .overlay{background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s}.overlay.open{opacity:1;pointer-events:auto}
+  .sheet{background:var(--card);transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1);max-height:88vh;overflow-y:auto;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .sheet.open{transform:translateY(0)}
+  .row:active{background:var(--tint)}
+  .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-block;margin-top:4px}
+  .s-draft{background:var(--tint);color:var(--muted)} .s-sent{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)} .s-paid{background:var(--okbg);color:var(--ok)}
+  .pill{font-size:13px;font-weight:500;padding:7px 14px;border-radius:999px;background:var(--tint);color:var(--muted)}
+  .pill.on{background:var(--accent);color:var(--accent-fg)}
+  .iconbtn{width:40px;height:40px;border-radius:12px;background:var(--tint);font-size:18px}
+  .sig-spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:sigspin .7s linear infinite}
+  @keyframes sigspin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.sheet,.overlay{transition:none}}
+</style>
+</head>
+<body>
+<div id="app" class="mx-auto max-w-md px-4 pb-44 pt-5"></div>
+<div id="chrome"></div>
+
+<input id="logoFile" type="file" accept="image/*,.svg" hidden>
+<input id="sigFile" type="file" accept="image/*,.svg" hidden>
+<div id="overlay" class="overlay fixed inset-0 z-30"></div>
+<div id="sheet" class="sheet fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md rounded-t-3xl px-4 pt-3" role="dialog" aria-modal="true" aria-labelledby="sTitle">
+  <div class="mx-auto mb-3 h-1 w-10 rounded-full" style="background:var(--line)"></div>
+  <h2 id="sTitle" class="mb-4 text-base font-semibold"></h2>
+  <div id="sBody"></div>
+  <div id="sNote" class="mb-3 hidden items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold" style="background:var(--tint)"></div>
+  <p id="sErr" class="mb-2 hidden text-sm" style="color:var(--danger)"></p>
+  <div class="grid grid-cols-2 gap-3">
+    <button id="sCancel" class="btn btn-s">Cancel</button>
+    <button id="sSave" class="btn btn-p">Save</button>
+  </div>
+  <button id="sDel" class="btn btn-d mt-2 hidden w-full"></button>
+</div>
+
+<script>
+(function(){
+var KEY='invoice-manager-v1', $=function(i){return document.getElementById(i)};
+var uid=function(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)};
+var clone=function(o){return JSON.parse(JSON.stringify(o))};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function money(n){return '$'+(Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function fdate(s){if(!s)return '';var d=new Date(s+'T00:00:00');return isNaN(d)?s:d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}
+
+var SPACEX='/spacex-logo.svg';
+var LOREM='Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed et magna augue. Donec a ipsum porta, scelerisque dui et,';
+function seed(){
+  var it=function(p){return{id:uid(),desc:'Lorem Ipsum',price:p,qty:1}};
+  var me={company:{name:'Company Name',tagline:'Tagline goes here'},from:{name:'Name Here',phone:'123 456 789 00',email:'nameyourmail.here'},bank:{name:'Bank Name LTD.',code:'12345678980'},terms:LOREM,tax:1.5789};
+  var c1={id:'c1',name:'Name Here',phone:'123 456 789 00',email:'nameyourmail.here'};
+  var c2={id:'c2',name:'Northwind Traders',phone:'555 010 2200',email:'billing@northwind.test'};
+  function mk(no,date,status,c,items){return{id:uid(),no:no,date:date,status:status,clientId:c.id,company:clone(me.company),from:clone(me.from),to:{name:c.name,phone:c.phone,email:c.email},items:items,tax:me.tax,bank:clone(me.bank),terms:me.terms,signer:'',logoUrl:SPACEX,signatureUrl:'',signatureOrigUrl:''}}
+  return{me:me,clients:[c1,c2],invoices:[
+    mk('000011220','2026-09-01','Sent',c1,[it(200),it(500),it(700),it(300),it(200)]),
+    mk('000011219','2026-08-14','Paid',c2,[{id:uid(),desc:'Brand audit',price:850,qty:1},{id:uid(),desc:'Workshop hours',price:120,qty:4}]),
+    mk('000011221','2026-09-20','Draft',c2,[{id:uid(),desc:'Retainer',price:1500,qty:1}])
+  ]};
+}
+var EMBED=window.parent!==window;
+function emptyState(){return{me:{company:{name:'',tagline:''},from:{name:'',phone:'',email:''},bank:{name:'',code:''},terms:'',tax:0},clients:[],invoices:[]}}
+function load(){if(EMBED)return emptyState();try{var r=localStorage.getItem(KEY);if(r){var s=JSON.parse(r);if(s&&s.invoices&&s.clients&&s.me)return s}}catch(e){}return seed()}
+var state=load(), ui={tab:'invoices',invId:null,filter:'All',confirm:false,sigBusy:false,sigBaseline:''};
+function persist(){
+  if(EMBED){
+    var inv=cur();
+    if(inv) window.parent.postMessage({type:'editor2:update',invoice:clone(inv)},'*');
+    return;
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+}
+function cur(){return state.invoices.filter(function(i){return i.id===ui.invId})[0]}
+function calc(i){var s=i.items.reduce(function(a,x){return a+x.price*x.qty},0),t=s*(Number(i.tax)||0)/100;return{sub:s,tax:t,total:s+t}}
+function nextNo(){var m=0,len=9;state.invoices.forEach(function(i){var n=parseInt(i.no,10);if(!isNaN(n)&&n>m){m=n;len=i.no.length}});return String(m+1).padStart(len,'0')}
+function chip(s){return '<span class="chip s-'+s.toLowerCase()+'">'+s+'</span>'}
+
+/* ---------- Views ---------- */
+function listView(){
+  var f=ui.filter, list=state.invoices.filter(function(i){return f==='All'||i.status===f});
+  var owed=state.invoices.filter(function(i){return i.status==='Sent'}).reduce(function(a,i){return a+calc(i).total},0);
+  var h='<header class="mb-4"><h1 class="text-xl font-bold tracking-tight">Invoices</h1><p class="muted mt-1 text-sm">Awaiting payment: <b style="color:var(--ink)">'+money(owed)+'</b></p></header>';
+  h+='<div class="mb-4 flex gap-2 overflow-x-auto">'+['All','Draft','Sent','Paid'].map(function(s){return '<button class="pill '+(f===s?'on':'')+'" data-a="filter" data-f="'+s+'">'+s+'</button>'}).join('')+'</div>';
+  if(!list.length)h+='<p class="muted py-12 text-center text-sm">Nothing here yet. Tap + to create an invoice.</p>';
+  h+=list.map(function(i){return '<button data-a="open" data-id="'+i.id+'" class="card row mb-3 flex w-full items-center justify-between gap-3 rounded-2xl p-4 text-left">'+
+    '<span class="min-w-0"><span class="block text-[15px] font-semibold">'+esc(i.no)+'</span><span class="muted block truncate text-xs">'+esc(i.to.name||'No client yet')+' · '+fdate(i.date)+'</span></span>'+
+    '<span class="text-right"><span class="block text-[15px] font-bold">'+money(calc(i).total)+'</span>'+chip(i.status)+'</span></button>'}).join('');
+  return h;
+}
+function clientsView(){
+  var h='<header class="mb-4"><h1 class="text-xl font-bold tracking-tight">Clients</h1><p class="muted mt-1 text-sm">People you invoice. Tap to edit.</p></header>';
+  if(!state.clients.length)h+='<p class="muted py-12 text-center text-sm">No clients yet. Tap + to add one.</p>';
+  h+=state.clients.map(function(c){
+    var inv=state.invoices.filter(function(i){return i.clientId===c.id}), tot=inv.reduce(function(a,i){return a+calc(i).total},0);
+    return '<button data-a="editclient" data-id="'+c.id+'" class="card row mb-3 flex w-full items-center justify-between gap-3 rounded-2xl p-4 text-left">'+
+    '<span class="min-w-0"><span class="block text-[15px] font-semibold">'+esc(c.name)+'</span><span class="muted block truncate text-xs">'+esc(c.email||c.phone||'No contact info')+'</span></span>'+
+    '<span class="muted text-right text-xs">'+inv.length+' invoice'+(inv.length===1?'':'s')+'<br>'+money(tot)+'</span></button>'}).join('');
+  return h;
+}
+function sec(id,label,body){return '<button data-a="editsec" data-sec="'+id+'" class="card row mb-3 block w-full rounded-2xl p-4 text-left"><span class="mb-2 flex justify-between"><span class="muted text-xs font-medium">'+label+'</span><span class="text-xs font-medium" style="color:var(--accent)">Edit</span></span>'+body+'</button>'}
+function person(p,empty){if(!p.name&&!p.phone&&!p.email)return '<span class="muted text-sm">'+empty+'</span>';
+  return '<span class="block text-[15px] font-semibold">'+esc(p.name)+'</span><span class="muted block text-sm">'+esc(p.phone)+'</span><span class="muted block text-sm">'+esc(p.email)+'</span>'}
+function detailView(i){
+  var h='<div class="mb-4 flex items-center gap-3"><button data-a="back" class="iconbtn" aria-label="Back to invoices">←</button><div class="min-w-0 flex-1"><p class="muted text-xs">Invoice</p><h1 class="text-xl font-bold tracking-tight">'+esc(i.no)+'</h1></div>'+chip(i.status)+'</div>';
+  h+=sec('meta','Details','<span class="text-[15px]">'+fdate(i.date)+'</span>');
+  h+=sec('company','Company','<span class="block text-[15px] font-semibold">'+esc(i.company.name)+'</span><span class="muted block text-sm">'+esc(i.company.tagline)+'</span>');
+  h+=sec('to','Invoice to',person(i.to,'Choose a client or type details'));
+  h+=sec('from','Invoice from',person(i.from,'Add your details'));
+  h+='<div class="card mb-3 overflow-hidden rounded-2xl"><p class="muted px-4 pt-4 text-xs font-medium">Items</p>';
+  h+=i.items.map(function(x){return '<button data-a="edititem" data-id="'+x.id+'" class="row flex w-full items-center justify-between gap-3 px-4 py-3 text-left"><span class="min-w-0"><span class="block truncate text-[15px] font-medium">'+esc(x.desc)+'</span><span class="muted block text-xs">'+money(x.price)+' × '+x.qty+'</span></span><span class="text-[15px] font-semibold">'+money(x.price*x.qty)+'</span></button>'}).join('');
+  h+='<button data-a="additem" class="row w-full px-4 py-3 text-left text-sm font-semibold" style="color:var(--accent)">+ Add item</button></div>';
+  h+=sec('tax','Tax rate','<span class="text-[15px]">'+(Number(i.tax)||0)+'%</span>');
+  h+=sec('bank','Payment info','<span class="block text-sm">Bank name: '+esc(i.bank.name)+'</span><span class="block text-sm">Bank code: '+esc(i.bank.code)+'</span>');
+  h+=sec('terms','Terms &amp; conditions','<span class="muted block text-sm">'+esc(i.terms)+'</span>');
+  h+=brandCard(i);
+  h+=signCard(i);
+  h+='<div class="mt-5 grid grid-cols-2 gap-3"><button data-a="dup" class="btn btn-s">Duplicate</button><button data-a="delinv" class="btn btn-s btn-d">'+(ui.confirm?'Tap again to delete':'Delete invoice')+'</button></div>';
+  return h;
+}
+function thumb(url,alt){
+  if(!url) return '<span class="muted block text-sm">None yet</span>';
+  return '<img src="'+esc(url)+'" alt="'+esc(alt)+'" class="mt-2 block h-12 max-w-full object-contain object-left">';
+}
+function brandCard(i){
+  return '<div class="card mb-3 rounded-2xl p-4"><p class="muted text-xs font-medium">Logo</p>'+thumb(i.logoUrl,'Logo')+
+    '<span class="mt-3 flex gap-4"><button type="button" data-a="pickimg" data-kind="logo" class="text-xs font-semibold" style="color:var(--accent)">Upload logo</button>'+
+    '<button type="button" data-a="resetlogo" class="muted text-xs font-semibold">Use SpaceX</button></span></div>';
+}
+function signPreview(i){
+  if(ui.sigBusy) return '<span class="mt-2 flex items-center gap-2 text-sm"><span class="sig-spin" aria-hidden="true"></span>Removing background…</span>';
+  return thumb(i.signatureUrl,'Signature');
+}
+function signCard(i){
+  return '<div class="card mb-3 rounded-2xl p-4"><button type="button" data-a="editsec" data-sec="sign" class="row mb-1 flex w-full justify-between text-left"><span class="muted text-xs font-medium">Authorised sign</span><span class="text-xs font-medium" style="color:var(--accent)">Edit name</span></button>'+
+    '<span class="text-sm">'+(esc(i.signer)||'<span class="muted">Name not set</span>')+'</span>'+signPreview(i)+
+    '<span class="mt-3 flex gap-4"><button type="button" data-a="pickimg" data-kind="signature" class="text-xs font-semibold" style="color:var(--accent)">Upload signature</button>'+
+    (i.signatureUrl && !ui.sigBusy?'<button type="button" data-a="clearsig" class="text-xs font-semibold" style="color:var(--danger)">Remove</button>':'')+'</span></div>';
+}
+function readUpload(input,apply){
+  var file=input.files&&input.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    input.value='';
+    var inv=cur();
+    if(!inv||typeof reader.result!=='string')return;
+    apply(inv,reader.result);
+    persist();
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+function render(){
+  var i=ui.invId?cur():null; if(ui.invId&&!i)ui.invId=null;
+  var app=$('app'),ch=$('chrome');
+  if(i){
+    var c=calc(i);app.innerHTML=detailView(i);
+    ch.innerHTML='<footer class="card fixed inset-x-0 bottom-0 z-10 border-x-0 border-b-0" style="padding-bottom:env(safe-area-inset-bottom,0px)"><div class="mx-auto max-w-md px-4 py-3 text-sm"><div class="muted flex justify-between"><span>Subtotal</span><span>'+money(c.sub)+'</span></div><div class="muted mt-1 flex justify-between"><span>Tax</span><span>'+money(c.tax)+'</span></div><div class="mt-2 flex items-baseline justify-between border-t pt-2" style="border-color:var(--line)"><span class="font-semibold">Total</span><span class="text-xl font-bold">'+money(c.total)+'</span></div></div></footer>';
+  }else{
+    app.innerHTML=ui.tab==='clients'?clientsView():listView();
+    var t=function(k,l){return '<button data-a="tab" data-t="'+k+'" class="h-14 flex-1 text-sm font-semibold" style="color:'+(ui.tab===k?'var(--accent)':'var(--muted)')+'">'+l+'</button>'};
+    ch.innerHTML='<button data-a="'+(ui.tab==='clients'?'newclient':'newinv')+'" aria-label="'+(ui.tab==='clients'?'Add client':'New invoice')+'" class="fixed right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-3xl shadow-lg" style="bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--accent);color:var(--accent-fg)">+</button>'+
+      '<nav class="card fixed inset-x-0 bottom-0 z-10 border-x-0 border-b-0" style="padding-bottom:env(safe-area-inset-bottom,0px)"><div class="mx-auto flex max-w-md">'+t('invoices','Invoices')+t('clients','Clients')+'</div></nav>';
+  }
+}
+
+/* ---------- Bottom sheet ---------- */
+var cfg=null, armed=false;
+function fieldHTML(f,val){
+  var id='f_'+f.k, v=val==null?'':val, el;
+  if(f.t==='textarea')el='<textarea id="'+id+'" data-k="'+f.k+'" rows="4" class="field">'+esc(v)+'</textarea>';
+  else if(f.t==='select')el='<select id="'+id+'" data-k="'+f.k+'" class="field">'+f.o.map(function(o){o=Array.isArray(o)?o:[o,o];return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(v)?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>';
+  else el='<input id="'+id+'" data-k="'+f.k+'" type="'+(f.t||'text')+'"'+(f.t==='number'?' inputmode="decimal" min="0" step="any"':'')+' value="'+esc(v)+'" class="field" autocomplete="off">';
+  return '<div class="mb-3"><label class="lbl" for="'+id+'">'+f.l+'</label>'+el+'</div>';
+}
+function collect(){var v={};document.querySelectorAll('#sBody [data-k]').forEach(function(el){var f=cfg.fields.filter(function(x){return x.k===el.dataset.k})[0];v[el.dataset.k]=f.t==='number'?(el.value===''?NaN:parseFloat(el.value)):el.value.trim()});return v}
+function updNote(){if(!cfg||!cfg.note)return;$('sNote').innerHTML='<span class="muted font-medium">Amount</span><span>'+cfg.note(collect())+'</span>'}
+function openSheet(c){
+  cfg=c;armed=false;
+  $('sTitle').textContent=c.title;
+  $('sBody').innerHTML=c.fields.map(function(f){return fieldHTML(f,(c.values||{})[f.k])}).join('');
+  $('sErr').classList.add('hidden');
+  $('sNote').classList.toggle('hidden',!c.note);$('sNote').classList.toggle('flex',!!c.note);
+  if(c.note)updNote();
+  var d=$('sDel');d.classList.toggle('hidden',!c.del);d.textContent=c.delLabel||'Delete';
+  $('overlay').classList.add('open');$('sheet').classList.add('open');$('sheet').scrollTop=0;
+  setTimeout(function(){var f=$('sBody').querySelector('input,textarea');if(f&&cfg)f.focus()},280);
+}
+function closeSheet(){cfg=null;$('overlay').classList.remove('open');$('sheet').classList.remove('open');if(document.activeElement&&document.activeElement.blur)document.activeElement.blur()}
+function sErr(m){$('sErr').textContent=m;$('sErr').classList.remove('hidden')}
+function sSave(){
+  if(!cfg)return;var v=collect();
+  for(var k=0;k<cfg.fields.length;k++){var f=cfg.fields[k],x=v[f.k];if(f.r&&(x===''||(typeof x==='number'&&isNaN(x))))return sErr(f.l+' is required.')}
+  var err=cfg.save(v);if(err)return sErr(err);
+  persist();closeSheet();render();
+}
+function sDel(){
+  if(!cfg||!cfg.del)return;
+  if(!armed){armed=true;$('sDel').textContent='Tap again to confirm';return}
+  cfg.del();persist();closeSheet();render();
+}
+
+/* ---------- Editors ---------- */
+var P=[{k:'name',l:'Name',r:1},{k:'phone',l:'Phone',t:'tel'},{k:'email',l:'Email',t:'email'}];
+var SEC={
+  meta:{t:'Invoice details',f:function(){return[{k:'no',l:'Invoice no.',r:1},{k:'date',l:'Date',t:'date',r:1},{k:'status',l:'Status',t:'select',o:['Draft','Sent','Paid']}]}},
+  company:{t:'Company',p:'company',me:1,f:function(){return[{k:'name',l:'Company name',r:1},{k:'tagline',l:'Tagline'}]}},
+  from:{t:'Invoice from',p:'from',me:1,f:function(){return P}},
+  to:{t:'Invoice to',p:'to',f:function(){return[{k:'_client',l:'Fill from a saved client',t:'select',o:[['','Choose a client…']].concat(state.clients.map(function(c){return[c.id,c.name]}))}].concat(P)}},
+  bank:{t:'Payment info',p:'bank',me:1,f:function(){return[{k:'name',l:'Bank name'},{k:'code',l:'Bank code'}]}},
+  terms:{t:'Terms & conditions',me:1,f:function(){return[{k:'terms',l:'Terms',t:'textarea'}]}},
+  sign:{t:'Authorised sign',f:function(){return[{k:'signer',l:'Signer name'}]}},
+  tax:{t:'Tax rate',f:function(){return[{k:'tax',l:'Tax rate (%)',t:'number'}]}}
+};
+function editSec(id){
+  var inv=cur(),s=SEC[id],tgt=s.p?inv[s.p]:inv,vals=Object.assign({},tgt);
+  if(id==='to')vals._client=inv.clientId||'';
+  openSheet({title:s.t,fields:s.f(),values:vals,save:function(v){
+    if(id==='to'){inv.clientId=v._client||'';delete v._client}
+    if(id==='tax'&&isNaN(v.tax))v.tax=0;
+    Object.assign(tgt,v);
+    if(s.me)state.me[s.p||'terms']=s.p?clone(tgt):tgt.terms;
+  }});
+}
+function editItem(id){
+  var inv=cur(),it=inv.items.filter(function(x){return x.id===id})[0];
+  openSheet({title:it?'Edit item':'New item',values:it||{qty:1},
+    fields:[{k:'desc',l:'Description',r:1},{k:'price',l:'Price ($)',t:'number',r:1},{k:'qty',l:'Quantity',t:'number',r:1}],
+    note:function(v){return money((v.price||0)*(v.qty||0))},
+    save:function(v){if(v.price<0)return 'Price can\u2019t be negative.';if(v.qty<1)return 'Quantity must be at least 1.';v.qty=Math.round(v.qty);
+      if(it)Object.assign(it,v);else inv.items.push({id:uid(),desc:v.desc,price:v.price,qty:v.qty})},
+    del:it?function(){inv.items=inv.items.filter(function(x){return x.id!==id})}:null,delLabel:'Delete item'});
+}
+function editClient(id){
+  var c=state.clients.filter(function(x){return x.id===id})[0];
+  openSheet({title:c?'Edit client':'New client',values:c||{},fields:P,
+    save:function(v){if(c)Object.assign(c,v);else state.clients.push(Object.assign({id:uid()},v))},
+    del:c?function(){state.clients=state.clients.filter(function(x){return x.id!==id});state.invoices.forEach(function(i){if(i.clientId===id)i.clientId=''})}:null,delLabel:'Delete client'});
+}
+function newInvoice(){
+  if(EMBED)return;
+  var m=state.me,inv={id:uid(),no:nextNo(),date:today(),status:'Draft',clientId:'',company:clone(m.company),from:clone(m.from),to:{name:'',phone:'',email:''},items:[],tax:m.tax,bank:clone(m.bank),terms:m.terms,signer:'',logoUrl:SPACEX,signatureUrl:'',signatureOrigUrl:''};
+  state.invoices.unshift(inv);persist();ui.invId=inv.id;ui.confirm=false;render();window.scrollTo(0,0);
+}
+function dupInvoice(){
+  if(EMBED){window.parent.postMessage({type:'editor2:duplicate'},'*');return}
+  var s=cur(),n=clone(s);n.id=uid();n.no=nextNo();n.date=today();n.status='Draft';n.items.forEach(function(x){x.id=uid()});
+  state.invoices.unshift(n);persist();ui.invId=n.id;ui.confirm=false;render();window.scrollTo(0,0);
+}
+
+/* ---------- Events ---------- */
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]');if(!b)return;var a=b.dataset.a;
+  if(a!=='delinv'&&ui.confirm){ui.confirm=false}
+  if(a==='tab'){ui.tab=b.dataset.t;render()}
+  else if(a==='filter'){ui.filter=b.dataset.f;render()}
+  else if(a==='open'){ui.invId=b.dataset.id;render();window.scrollTo(0,0)}
+  else if(a==='back'){
+    if(EMBED){window.parent.postMessage({type:'editor2:back'},'*');return}
+    ui.invId=null;ui.confirm=false;render()
+  }
+  else if(a==='newinv')newInvoice();
+  else if(a==='dup')dupInvoice();
+  else if(a==='delinv'){
+    if(!ui.confirm){ui.confirm=true;render();return}
+    if(EMBED){ui.confirm=false;window.parent.postMessage({type:'editor2:delete'},'*');render();return}
+    state.invoices=state.invoices.filter(function(i){return i.id!==ui.invId});persist();ui.invId=null;ui.confirm=false;render();
+  }
+  else if(a==='editsec')editSec(b.dataset.sec);
+  else if(a==='pickimg'){var input=$(b.dataset.kind==='logo'?'logoFile':'sigFile');if(input)input.click()}
+  else if(a==='resetlogo'){var inv=cur();if(!inv)return;inv.logoUrl=SPACEX;persist();render()}
+  else if(a==='clearsig'){var sig=cur();if(!sig)return;sig.signatureUrl='';sig.signatureOrigUrl='';ui.sigBusy=false;persist();render()}
+  else if(a==='edititem')editItem(b.dataset.id);
+  else if(a==='additem')editItem(null);
+  else if(a==='newclient')editClient(null);
+  else if(a==='editclient')editClient(b.dataset.id);
+});
+$('overlay').addEventListener('click',closeSheet);
+$('sCancel').addEventListener('click',closeSheet);
+$('sSave').addEventListener('click',sSave);
+$('sDel').addEventListener('click',sDel);
+$('logoFile').addEventListener('change',function(){readUpload($('logoFile'),function(inv,url){inv.logoUrl=url})});
+$('sigFile').addEventListener('change',function(){
+  var input=$('sigFile');
+  var file=input.files&&input.files[0];
+  if(!file||ui.sigBusy){input.value='';return}
+  var reader=new FileReader();
+  reader.onload=function(){
+    input.value='';
+    if(typeof reader.result!=='string')return;
+    var current=cur();
+    ui.sigBaseline=current&&current.signatureUrl||'';
+    ui.sigBusy=true;
+    render();
+    if(EMBED){
+      window.parent.postMessage({type:'editor2:signature',dataUrl:reader.result},'*');
+      return;
+    }
+    if(current){current.signatureUrl=reader.result;current.signatureOrigUrl=reader.result}
+    ui.sigBusy=false;
+    persist();
+    render();
+  };
+  reader.readAsDataURL(file);
+});
+$('sBody').addEventListener('input',updNote);
+$('sBody').addEventListener('change',function(e){
+  if(e.target.dataset.k!=='_client')return;
+  var c=state.clients.filter(function(x){return x.id===e.target.value})[0];if(!c)return;
+  ['name','phone','email'].forEach(function(k){var el=$('f_'+k);if(el)el.value=c[k]||''});
+});
+document.addEventListener('keydown',function(e){
+  if(!cfg)return;
+  if(e.key==='Escape')closeSheet();
+  else if(e.key==='Enter'&&e.target.tagName==='INPUT')sSave();
+});
+if(EMBED){
+  document.addEventListener('keydown',function(e){
+    var cmd=e.metaKey||e.ctrlKey;
+    if(!cmd)return;
+    var key=e.key.toLowerCase();
+    if(key==='s'){e.preventDefault();window.parent.postMessage({type:'editor2:save'},'*')}
+    else if(key==='z'&&!e.shiftKey){e.preventDefault();window.parent.postMessage({type:'editor2:undo'},'*')}
+    else if((key==='z'&&e.shiftKey)||key==='y'){e.preventDefault();window.parent.postMessage({type:'editor2:redo'},'*')}
+  });
+  window.addEventListener('message',function(e){
+    if(e.source!==window.parent)return;
+    var d=e.data;
+    if(!d||d.type!=='editor2:hydrate'||!d.invoice)return;
+    var inv=d.invoice;
+    state.clients=Array.isArray(d.clients)?d.clients:[];
+    state.invoices=[inv];
+    if(inv.company) state.me.company=clone(inv.company);
+    if(inv.from) state.me.from=clone(inv.from);
+    if(inv.bank) state.me.bank=clone(inv.bank);
+    state.me.terms=inv.terms||'';
+    state.me.tax=Number(inv.tax)||0;
+    ui.invId=inv.id;
+    ui.confirm=false;
+    if(ui.sigBusy&&inv.signatureUrl&&inv.signatureUrl!==ui.sigBaseline) ui.sigBusy=false;
+    closeSheet();
+    render();
+  });
+}else{
+  render();
+}
+})();
+</script>
+</body>
+</html>

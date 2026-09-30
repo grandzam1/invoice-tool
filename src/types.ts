@@ -51,6 +51,7 @@ export interface InvoiceContent {
   sections: InvoiceSection[];
   signature: {
     imageUrl: string;
+    originalImageUrl: string;
     signeeName: string;
     signeeRole: string;
   };
@@ -72,4 +73,17 @@ export interface InvoiceDocument {
   content: InvoiceContent;
   created_at: string;
   updated_at: string;
+  /**
+   * Extra fields the classic canvas does not edit.
+   * Present after editor 2 saves an invoice. Ignored by InvoiceCanvas.
+   */
+  editor2?: {
+    status: string;
+    clientId: string;
+    tax: number;
+    currency?: string;
+    discount?: number;
+    paymentMethods?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
+    items: Array<{ id: string; desc: string; note?: string; price: number; qty: number }>;
+  };
 }

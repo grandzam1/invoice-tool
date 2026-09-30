@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@400;500&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700;800&family=Lato:wght@400;700&family=Cormorant+Garamond:wght@500;600;700&family=Jost:wght@400;500&family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Default theme: Classic navy */
+  :root {
+    --hdr-bg:#25235F; --hdr-fg:#FFFFFF; --badge:#FFFFFF;
+    --th-bg:#25235F;  --th-fg:#FFFFFF;
+    --band:#D9DAE7;   --paper:#F6F6FC; --frame:#FFFFFF;
+    --accent:#25235F; --ink:#262626;   --muted:#525252; --rule:#A3A3A3;
+    --fh:'Montserrat',Helvetica,Arial,sans-serif;
+    --fb:'Roboto',Arial,sans-serif;
+  }
+  [data-theme="plain"] {
+    --hdr-bg:#EFEFEF; --hdr-fg:#111111; --badge:#111111;
+    --th-bg:#111111;  --th-fg:#FFFFFF;
+    --band:#EDEDED;   --paper:#FFFFFF; --frame:#FFFFFF;
+    --accent:#111111; --ink:#222222;   --muted:#555555; --rule:#999999;
+    --fh:'Inter',Helvetica,Arial,sans-serif;
+    --fb:'Inter',Helvetica,Arial,sans-serif;
+  }
+  [data-theme="forest"] {
+    --hdr-bg:#0F3D2E; --hdr-fg:#FFFFFF; --badge:#CFE3D8;
+    --th-bg:#0F3D2E;  --th-fg:#FFFFFF;
+    --band:#DDE8E1;   --paper:#F6FAF7; --frame:#FFFFFF;
+    --accent:#0F3D2E; --ink:#22302A;   --muted:#4B5D54; --rule:#9AAAA1;
+    --fh:'Playfair Display',Georgia,serif;
+    --fb:'Lato',Arial,sans-serif;
+  }
+  [data-theme="noir"] {
+    --hdr-bg:#17171A; --hdr-fg:#F3EBD3; --badge:#C6A664;
+    --th-bg:#17171A;  --th-fg:#E8D9A8;
+    --band:#ECE6D6;   --paper:#FAF8F3; --frame:#FFFFFF;
+    --accent:#8A6D2F; --ink:#2A2A2A;   --muted:#5A5852; --rule:#B3AA92;
+    --fh:'Cormorant Garamond',Georgia,serif;
+    --fb:'Jost',Arial,sans-serif;
+  }
+  [data-theme="burgundy"] {
+    --hdr-bg:#5A1A2C; --hdr-fg:#FFF4F1; --badge:#F0D3D2;
+    --th-bg:#5A1A2C;  --th-fg:#FFF4F1;
+    --band:#EADCDF;   --paper:#FBF7F7; --frame:#FFFFFF;
+    --accent:#5A1A2C; --ink:#2B2224;   --muted:#5E4E52; --rule:#B09CA1;
+    --fh:'Fraunces',Georgia,serif;
+    --fb:'DM Sans',Arial,sans-serif;
+  }
+  [data-theme="ocean"] {
+    --hdr-bg:#0B4F6C; --hdr-fg:#FFFFFF; --badge:#BFE0EC;
+    --th-bg:#0B4F6C;  --th-fg:#FFFFFF;
+    --band:#DCEBF1;   --paper:#F5FAFC; --frame:#FFFFFF;
+    --accent:#0B4F6C; --ink:#1F2C33;   --muted:#4A5C66; --rule:#9CB0BA;
+    --fh:'Space Grotesk',Helvetica,Arial,sans-serif;
+    --fb:'Inter',Helvetica,Arial,sans-serif;
+  }
+
+  .sheet    { background:var(--paper); font-family:var(--fh); }
+  .fb       { font-family:var(--fb); }
+  .hdr-bg   { background:var(--hdr-bg); }
+  .hdr-fg   { color:var(--hdr-fg); }
+  .badge    { border:1px solid var(--badge); color:var(--hdr-fg); z-index:2; overflow:hidden; box-sizing:border-box; }
+  .th       { background:var(--th-bg); color:var(--th-fg); }
+  .band     { background:var(--band); }
+  .paper    { background:var(--paper); }
+  .frame    { border:7px solid var(--frame); background:var(--paper); }
+  .accent   { color:var(--accent); }
+  .accent-bg{ background:var(--accent); }
+  .ink      { color:var(--ink); }
+  .muted    { color:var(--muted); }
+  .rule-t   { border-top:1px solid var(--rule); }
+  .vertical { writing-mode:vertical-rl; transform:rotate(180deg); max-height:100%; line-height:1; }
+
+  .tab { padding:6px 14px; font:500 11px/1 'Inter',Arial,sans-serif; border-radius:999px; color:#525252; background:transparent; border:1px solid transparent; cursor:pointer; white-space:nowrap; }
+  .tab:hover { background:#e5e5e5; }
+  .tab[aria-selected="true"] { background:#171717; color:#fff; }
+  .tab:focus-visible { outline:2px solid #171717; outline-offset:2px; }
+  #btn-print { margin-left:4px; background:#2a6b66; color:#fff; }
+  #btn-print:hover { background:#32807a; }
+
+  #logo-img.is-default { filter:brightness(0) invert(1); }
+  [data-theme="plain"] #logo-img.is-default { filter:brightness(0); }
+
+  html.is-embed, html.is-embed body { height:100%; margin:0; overflow:hidden; background:#151517; }
+  html.is-embed body { padding:0 !important; }
+  html.is-embed .tabs {
+    position:fixed; top:auto; bottom:8px; left:50%; z-index:20;
+    margin:0; transform:translateX(-50%);
+  }
+  html.is-embed #sheet-scroll {
+    height:100%; overflow:hidden;
+    display:flex; align-items:flex-start; justify-content:center;
+  }
+  html.is-embed #sheet { margin:0; flex-shrink:0; box-shadow:none; }
+
+  @media print {
+    html, body, html.is-embed, html.is-embed body {
+      height:auto !important; overflow:visible !important;
+      margin:0 !important; padding:0 !important; background:#fff !important;
+    }
+    html.is-embed #sheet-scroll {
+      height:auto !important; overflow:visible !important; display:block !important;
+    }
+    .sheet { box-shadow:none !important; margin:0 !important; transform:none !important; }
+    .tabs { display:none !important; }
+  }
+</style>
+<script>
+  tailwind.config = { theme: { extend: {} } }
+  if (window.parent && window.parent !== window) document.documentElement.classList.add('is-embed');
+</script>
+</head>
+<body class="bg-neutral-300 antialiased py-4 print:py-0">
+
+<nav class="tabs sticky top-0 z-10 mx-auto mb-4 flex w-fit max-w-full gap-1 overflow-x-auto rounded-full bg-white/90 p-1 shadow-sm backdrop-blur" role="tablist" aria-label="Invoice design">
+  <button class="tab" role="tab" aria-selected="true"  data-theme-btn="classic">Classic</button>
+  <button class="tab" role="tab" aria-selected="false" data-theme-btn="plain">Plain</button>
+  <button class="tab" role="tab" aria-selected="false" data-theme-btn="forest">Forest</button>
+  <button class="tab" role="tab" aria-selected="false" data-theme-btn="noir">Noir</button>
+  <button class="tab" role="tab" aria-selected="false" data-theme-btn="burgundy">Burgundy</button>
+  <button class="tab" role="tab" aria-selected="false" data-theme-btn="ocean">Ocean</button>
+  <button id="btn-print" class="tab" type="button">Print / PDF</button>
+</nav>
+
+<div id="sheet-scroll" class="overflow-x-auto">
+<main id="sheet" class="sheet relative mx-auto h-[297mm] w-[210mm] shrink-0 overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.15)]">
+
+  <div class="hdr-bg absolute inset-x-0 top-0 h-[144.5mm]"></div>
+
+  <div class="hdr-fg absolute left-[12.3mm] top-[14mm]">
+    <img id="logo-img" src="/spacex-logo.svg" alt="SpaceX" class="is-default block h-[22px] w-auto max-w-[70mm] object-contain">
+    <p id="company-name" class="hidden text-[13px] font-bold uppercase leading-none"></p>
+    <p id="tagline" class="mt-1 hidden text-[6px] uppercase tracking-wide"></p>
+  </div>
+  <div class="hdr-fg fb absolute right-[52mm] top-[16mm] text-right text-[10.5px] leading-snug">
+    <p>Invoice No: <span id="inv-no" class="ml-1">000011220</span></p>
+    <p>Date: <span id="inv-date" class="ml-1">DD/MM/YY</span></p>
+  </div>
+
+  <div class="badge absolute left-[168mm] top-[5mm] flex h-[78.5mm] w-[29.5mm] items-center justify-center px-[3mm] py-[6mm]">
+    <span class="vertical text-[36px] font-extrabold uppercase leading-none tracking-wide">Invoice</span>
+  </div>
+
+  <div class="hdr-fg absolute left-[12.3mm] top-[44mm]">
+    <p class="text-[13px] font-normal">Invoice To:</p>
+    <p id="to-name" class="mt-2.5 text-[14px] font-bold uppercase">Name Here</p>
+    <p class="fb mt-2 text-[12px] leading-relaxed"><span id="to-phone">123 456 789 00</span><br><span id="to-email">nameyourmail.here</span></p>
+  </div>
+  <div class="hdr-fg absolute left-[108mm] top-[44mm] w-[54mm] break-words">
+    <p class="text-[13px] font-normal">Invoice From:</p>
+    <p id="from-name" class="mt-2.5 text-[14px] font-bold uppercase">Name Here</p>
+    <p class="fb mt-2 text-[12px] leading-relaxed"><span id="from-phone">123 456 789 00</span><br><span id="from-email">nameyourmail.here</span></p>
+  </div>
+
+  <div class="absolute left-[12.7mm] top-[88mm] w-[184.5mm]">
+
+    <div class="frame">
+      <div class="th grid grid-cols-[1fr_125px_115px_122px] items-center py-[13px] text-[13px] font-bold uppercase">
+        <span class="pl-[26px]">Description</span>
+        <span class="text-center">Price</span>
+        <span class="text-center">Qty</span>
+        <span class="text-center">Amount</span>
+      </div>
+
+      <div id="line-items" class="fb ink text-[15px]">
+        <div class="paper grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center">
+          <span class="pl-[32px]">Lorem Ipsum</span><span class="text-center">$200</span><span class="text-center">1</span><span class="text-center">$200</span>
+        </div>
+        <div class="band grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center">
+          <span class="pl-[32px]">Lorem Ipsum</span><span class="text-center">$500</span><span class="text-center">1</span><span class="text-center">$500</span>
+        </div>
+        <div class="paper grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center">
+          <span class="pl-[32px]">Lorem Ipsum</span><span class="text-center">$700</span><span class="text-center">1</span><span class="text-center">$700</span>
+        </div>
+        <div class="band grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center">
+          <span class="pl-[32px]">Lorem Ipsum</span><span class="text-center">$300</span><span class="text-center">1</span><span class="text-center">$300</span>
+        </div>
+        <div class="paper grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center">
+          <span class="pl-[32px]">Lorem Ipsum</span><span class="text-center">$200</span><span class="text-center">1</span><span class="text-center">$200</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between">
+      <div class="accent mt-[22mm]">
+        <p class="text-[13px] font-medium">Payment Info:</p>
+        <div class="accent-bg mb-2.5 mt-1 h-px w-[26mm]"></div>
+        <p class="fb muted text-[10.5px] leading-snug">
+          <span class="inline-block w-[24mm]">Bank Name:</span><span id="bank-name">Bank Name LTD.</span><br>
+          <span class="inline-block w-[24mm]">Bank Code:</span><span id="bank-code" class="whitespace-pre-line">12345678980</span>
+        </p>
+      </div>
+
+      <div class="fb muted w-[62mm] text-[11px]">
+        <div class="band flex h-[40px] items-center justify-between pl-3 pr-8">
+          <span class="uppercase">Subtotal :</span><span id="subtotal" class="ink font-bold">$1900</span>
+        </div>
+        <div class="flex h-[40px] items-center justify-between pl-3 pr-8">
+          <span class="ml-auto mr-10 uppercase">Tax :</span><span id="tax" class="ink font-bold">$30</span>
+        </div>
+        <div class="band flex h-[40px] items-center justify-between pl-3 pr-8">
+          <span class="ink ml-auto mr-10 font-bold uppercase">Total :</span><span id="total" class="ink font-bold">$1930</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="absolute inset-x-[12.3mm] bottom-[16mm] flex items-end justify-between">
+    <div class="accent w-[100mm]">
+      <p class="text-[12px] font-bold uppercase">Terms &amp; Conditions:</p>
+      <div class="accent-bg mb-2.5 mt-1 h-px w-[15mm]"></div>
+      <p id="terms" class="fb ink whitespace-pre-wrap text-[9px] leading-snug">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed et magna augue. Donec a ipsum porta, scelerisque dui et,
+      </p>
+    </div>
+    <div class="fb muted rule-t mr-[5mm] w-[40mm] pt-2 text-center text-[10.5px]">
+      <img id="sig-img" alt="" class="mx-auto mb-1 hidden h-10 max-w-full object-contain">
+      <p id="signer-name" class="mb-1 hidden text-[11px] font-semibold"></p>
+      Authorised Sign
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+  (function () {
+    var sheet = document.getElementById('sheet');
+    var tabs = document.querySelectorAll('[data-theme-btn]');
+    function setTheme(name) {
+      if (name === 'classic') sheet.removeAttribute('data-theme');
+      else sheet.setAttribute('data-theme', name);
+      document.documentElement.setAttribute('data-theme', name === 'classic' ? '' : name);
+      tabs.forEach(function (t) {
+        t.setAttribute('aria-selected', String(t.dataset.themeBtn === name));
+      });
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () { setTheme(t.dataset.themeBtn); });
+    });
+
+    function moneyLabel(n) {
+      n = Number(n);
+      if (!isFinite(n)) n = 0;
+      return '$' + (n % 1 ? n.toFixed(2) : String(n));
+    }
+    function dateLabel(iso) {
+      if (!iso) return '';
+      var s = String(iso);
+      if (s.indexOf('-') !== -1) {
+        var p = s.split('-');
+        if (p.length === 3) return p[2] + '/' + p[1] + '/' + (p[0].length === 4 ? p[0].slice(2) : p[0]);
+      }
+      return s;
+    }
+    function setText(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value == null ? '' : String(value);
+    }
+    function isDefaultCompany(name) {
+      var n = String(name || '').trim().toLowerCase();
+      return !n || n === 'company name' || n === 'spacex' || n === 'invoice' || n === 'project invoice';
+    }
+    function isDefaultLogo(url) {
+      var path = String(url || '').split('?')[0];
+      return !path || /\/spacex-logo\.svg$/.test(path) || path === '/spacex-logo.svg';
+    }
+    function applyBrand(company, tagline, logoUrl) {
+      var logoEl = document.getElementById('logo-img');
+      var coEl = document.getElementById('company-name');
+      var tgEl = document.getElementById('tagline');
+      var src = logoUrl || '/spacex-logo.svg';
+      var customLogo = !isDefaultLogo(src);
+      if (logoEl) {
+        logoEl.src = src;
+        logoEl.classList.toggle('is-default', !customLogo);
+      }
+      if (customLogo || isDefaultCompany(company)) {
+        if (logoEl) logoEl.style.display = 'block';
+        if (coEl) coEl.style.display = 'none';
+        if (tgEl) tgEl.style.display = 'none';
+        return;
+      }
+      if (logoEl) logoEl.style.display = 'none';
+      if (coEl) {
+        coEl.style.display = 'block';
+        coEl.textContent = company;
+      }
+      var line = String(tagline || '').trim();
+      var showTag = line && line.toLowerCase() !== 'tagline goes here';
+      if (tgEl) {
+        tgEl.style.display = showTag ? 'block' : 'none';
+        tgEl.textContent = showTag ? line : '';
+      }
+    }
+    function applySignature(url, name) {
+      var img = document.getElementById('sig-img');
+      var nameEl = document.getElementById('signer-name');
+      if (img) {
+        if (url) {
+          img.src = url;
+          img.classList.remove('hidden');
+        } else {
+          img.removeAttribute('src');
+          img.classList.add('hidden');
+        }
+      }
+      if (nameEl) {
+        nameEl.textContent = name || '';
+        nameEl.classList.toggle('hidden', !name);
+      }
+    }
+    function renderItems(items) {
+      var host = document.getElementById('line-items');
+      if (!host) return;
+      var list = (items || []).filter(function (item) {
+        return item.visible !== false && Number(item.visible) !== 0;
+      });
+      host.textContent = '';
+      list.forEach(function (item, index) {
+        var row = document.createElement('div');
+        row.className = (index % 2 === 0 ? 'paper' : 'band') + ' grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center';
+        var qty = Number(item.qty || 1);
+        var price = Number(item.price || 0);
+        var values = [item.description || '', moneyLabel(price), String(qty), moneyLabel(price * qty)];
+        values.forEach(function (value, i) {
+          var span = document.createElement('span');
+          span.className = i === 0 ? 'pl-[32px]' : 'text-center';
+          span.textContent = value;
+          row.appendChild(span);
+        });
+        host.appendChild(row);
+      });
+    }
+    function fillInvoice(view) {
+      if (!view) return;
+      var d = view.display || {};
+      var inv = view.invoice || {};
+      var t = view.totals || { subtotal: 0, tax_amount: 0, total: 0 };
+      applyBrand(d.company_name || '', d.tagline || '', d.logo_url || '');
+      applySignature(d.signature_url || '', d.signer_name || '');
+      setText('inv-no', inv.invoice_number || '');
+      setText('inv-date', dateLabel(inv.invoice_date));
+      setText('to-name', d.client_name || '');
+      setText('to-phone', d.client_phone || '');
+      setText('to-email', d.client_email || '');
+      setText('from-name', d.from_name || '');
+      setText('from-phone', d.from_phone || '');
+      setText('from-email', d.from_email || '');
+      setText('bank-name', d.bank_name || '');
+      setText('bank-code', d.bank_code || '');
+      setText('terms', d.terms || '');
+      setText('subtotal', moneyLabel(t.subtotal));
+      setText('tax', moneyLabel(t.tax_amount));
+      setText('total', moneyLabel(t.total));
+      renderItems(view.items || []);
+      fitSheet();
+    }
+    function fitSheet() {
+      if (!document.documentElement.classList.contains('is-embed') || !sheet) return;
+      var w = sheet.offsetWidth;
+      var h = sheet.offsetHeight;
+      if (!w || !h) return;
+      var scale = Math.min(window.innerWidth / w, Math.max(0.1, (window.innerHeight - 52) / h));
+      var extraW = w * (1 - scale);
+      var extraH = h * (1 - scale);
+      sheet.style.transformOrigin = 'top center';
+      sheet.style.transform = 'scale(' + scale + ')';
+      sheet.style.marginLeft = (-extraW / 2) + 'px';
+      sheet.style.marginRight = (-extraW / 2) + 'px';
+      sheet.style.marginBottom = (-extraH) + 'px';
+    }
+    function resetSheetForPrint() {
+      if (!sheet) return;
+      sheet.style.transform = 'none';
+      sheet.style.marginLeft = '0';
+      sheet.style.marginRight = '0';
+      sheet.style.marginBottom = '0';
+    }
+    var printBtn = document.getElementById('btn-print');
+    if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+    window.onbeforeprint = resetSheetForPrint;
+    window.onafterprint = fitSheet;
+    window.fillInvoice = fillInvoice;
+    window.addEventListener('resize', fitSheet);
+    fitSheet();
+  })();
+</script>
+</body>
+</html>

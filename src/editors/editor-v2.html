@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Invoice Editor</title>
+<style>
+:root{--bg:#f4f4f2;--card:#fff;--ink:#1a1a1a;--mute:#777;--line:#e4e4e0;--acc:#1a1a1a;--accInk:#fff;--soft:#efefec;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141414;--card:#1e1e1e;--ink:#eee;--mute:#999;--line:#333;--acc:#eee;--accInk:#111;--soft:#2a2a2a}}
+:root[data-theme="dark"]{--bg:#141414;--card:#1e1e1e;--ink:#eee;--mute:#999;--line:#333;--acc:#eee;--accInk:#111;--soft:#2a2a2a}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:900px){.wrap{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}.sticky{position:sticky;top:16px}}
+h1{font-size:20px;margin:0 0 4px}
+.hint{color:var(--mute);font-size:13px;margin:0 0 12px}
+details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px}
+summary{cursor:pointer;padding:14px 16px;font-weight:600;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary:after{content:"+";float:right;color:var(--mute)}
+details[open] summary:after{content:"–"}
+.body{padding:0 16px 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.full{grid-column:1/-1}
+label{display:block;font-size:12px;color:var(--mute);margin-bottom:3px}
+input,textarea,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 13px;border-radius:9px}
+button.pri{background:var(--acc);color:var(--accInk);border-color:var(--acc)}
+button.x{padding:6px 10px;color:var(--mute)}
+.row{display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr 40px;align-items:end;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.row>div:first-child{grid-column:1/-1}.row .n{grid-column:1/-1}.row input{min-width:0}
+.pm{background:var(--soft);border-radius:12px;padding:12px;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:1fr 1.4fr 34px;gap:8px;margin-top:8px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.tot{display:flex;justify-content:space-between;padding:4px 0;color:var(--mute)}
+.tot b{color:var(--ink)}
+.tot.big{font-size:17px;border-top:2px solid var(--ink);margin-top:6px;padding-top:8px;color:var(--ink)}
+/* preview */
+.paper{background:#fff;color:#1a1a1a;border-radius:6px;padding:28px 24px;box-shadow:0 2px 14px #0002;font-size:13px}
+.paper h2{letter-spacing:.15em;font-size:22px;margin:24px 0}
+.paper .top{display:flex;justify-content:space-between;gap:12px;color:#555;font-size:12px}
+.paper .lbl{letter-spacing:.2em;font-size:11px;font-weight:700;margin:16px 0 6px}
+.paper table{width:100%;border-collapse:collapse;margin-top:8px}
+.paper th{text-align:left;font-size:11px;letter-spacing:.1em;padding:8px 4px;border-top:2px solid #1a1a1a;border-bottom:1px solid #ddd}
+.paper td{padding:8px 4px;border-bottom:1px solid #eee;vertical-align:top}
+.paper .r{text-align:right}
+.paper small{color:#888;display:block}
+.paper .sum{margin-left:auto;width:min(260px,100%);margin-top:8px}
+.paper .sum div{display:flex;justify-content:space-between;padding:5px 4px}
+.paper .sum .t{border-top:2px solid #1a1a1a;font-weight:700}
+.paper .pmb{border-top:2px solid #1a1a1a;margin-top:16px;padding-top:6px;max-width:260px}
+.paper .pmb div{color:#666;font-size:12px}
+.paper .sig{text-align:right;margin-top:22px;font-style:italic;font-family:"Brush Script MT",cursive;font-size:24px}
+.paper .sig small{font:12px system-ui;font-style:normal}
+.paper .terms{border-top:1px solid #ddd;margin-top:18px;padding-top:8px;color:#777;font-size:11px}
+.up{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.up img{max-height:48px;max-width:140px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:3px}
+.up input{display:none}
+pre{background:var(--soft);padding:12px;border-radius:10px;overflow:auto;max-height:280px;font-size:12px;margin:8px 0 0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--acc);color:var(--accInk);padding:9px 16px;border-radius:99px;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div>
+  <h1>Invoice Editor</h1>
+  <p class="hint">Fill in the sections. Totals are calculated for you. Everything auto-saves in this browser.</p>
+
+  <details open><summary>1 · Your company</summary><div class="body"><div class="grid" id="f-issuer"></div><div class="up" id="up-logo"></div>
+    <div class="bar"><button id="saveProfile">Save as company profile</button><button id="loadProfile">Load profile</button></div></div></details>
+
+  <details open><summary>2 · Bill to</summary><div class="body"><div class="grid" id="f-bill"></div></div></details>
+
+  <details open><summary>3 · Invoice details</summary><div class="body"><div class="grid" id="f-meta"></div></div></details>
+
+  <details open><summary>4 · Items</summary><div class="body"><div id="items"></div><button id="addItem">+ Add item</button></div></details>
+
+  <details open><summary>5 · Payment methods</summary><div class="body"><div id="pms"></div>
+    <label>Quick add</label>
+    <div class="bar" id="presets"></div></div></details>
+
+  <details open><summary>6 · Terms &amp; signature</summary><div class="body"><div class="grid" id="f-end"></div><div class="up" id="up-sig"></div></div></details>
+</div>
+
+<div class="sticky">
+  <div class="paper" id="paper"></div>
+  <details style="margin-top:12px"><summary>Data (what gets saved to your DB)</summary><div class="body">
+    <div class="bar" style="margin-top:0"><button class="pri" id="copy">Copy JSON</button><button id="reset">New blank invoice</button></div>
+    <pre id="json"></pre></div></details>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Presets: just data. Add your own here, no other code changes. ----------
+const uid = () => 'it-' + Math.random().toString(36).slice(2, 10);
+const PRESETS = {
+  "Bank": ["Bank Name","Account No.","Account Holder","SWIFT / IBAN"],
+  "PayPal": ["Email"],
+  "M-Pesa": ["Paybill / Till","Account","Name"],
+  "Crypto": ["Network","Wallet Address"],
+  "Custom": ["Label"]
+};
+const blank = () => ({
+  issuer:{name:"",address:"",phones:"",website:"",email:"",logo:""},
+  bill:{name:"",role:"",address:"",phone:"",email:""},
+  meta:{number:"INV-001",date:new Date().toISOString().slice(0,10),currency:"USD",tax:0,discount:0},
+  items:[{id:uid(),description:"",note:"",qty:1,price:0}],
+  pms:[],
+  end:{terms:"",sigName:"",sigRole:"",sigImg:""}
+});
+let S = blank();
+const EMBED = window.parent !== window;
+const embed = { id:'', status:'Draft', clientId:'', tagline:'', signatureOrigUrl:'', ready:false };
+let sigBusy = false;
+let sigBaseline = '';
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+const toast = m => {const t=$("toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1600)};
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- The formatter: the ONE place totals are computed ----------
+function formatInvoice(s){
+  const items = s.items.map(i=>({description:i.description,note:i.note,qty:+i.qty||0,
+    price:Math.round((+i.price||0)*100),total:Math.round((+i.qty||0)*(+i.price||0)*100)}));
+  const subtotal = items.reduce((a,i)=>a+i.total,0);
+  const tax = Math.round(subtotal*(+s.meta.tax||0)/100);
+  const discount = Math.round((+s.meta.discount||0)*100);
+  return {
+    number:s.meta.number,date:s.meta.date,currency:s.meta.currency,
+    issuer:{...s.issuer,phones:s.issuer.phones.split(",").map(p=>p.trim()).filter(Boolean)},
+    bill_to:s.bill,items,
+    payment_methods:s.pms.map(p=>({title:p.title,fields:p.fields.filter(f=>f.label||f.value)})),
+    terms:s.end.terms,signature:{name:s.end.sigName,role:s.end.sigRole,image:s.end.sigImg||""},
+    subtotal,tax_percent:+s.meta.tax||0,tax,discount,total:subtotal+tax-discount  // amounts in cents
+  };
+}
+const money = (c,cur) => { try{return new Intl.NumberFormat(undefined,{style:"currency",currency:cur||"USD"}).format(c/100)}catch(e){return (c/100).toFixed(2)} };
+
+// ---------- Simple field builders ----------
+function fields(host, obj, defs, onChange){
+  host.innerHTML="";
+  defs.forEach(([key,label,type,full])=>{
+    const w=document.createElement("div"); if(full) w.className="full";
+    const l=document.createElement("label"); l.textContent=label;
+    const i=document.createElement(type==="area"?"textarea":"input");
+    if(type==="area") i.rows=3; else i.type=type||"text";
+    if(type==="number"){i.step="any";i.inputMode="decimal";i.placeholder="0"}
+    i.value=obj[key]===0?"":(obj[key]??"");
+    i.oninput=()=>{obj[key]=i.value;onChange()};
+    w.append(l,i); host.append(w);
+  });
+}
+
+function uploader(host,obj,key,label,maxW){
+  host.innerHTML="";
+  const img=document.createElement("img"), file=document.createElement("input"); file.type="file"; file.accept="image/*";
+  const up=document.createElement("button"); up.textContent=obj[key]?"Change "+label:"Upload "+label;
+  const rm=document.createElement("button"); rm.textContent="Remove";
+  const sync=()=>{img.style.display=obj[key]?"":"none";rm.style.display=obj[key]?"":"none";up.textContent=obj[key]?"Change "+label:"Upload "+label;if(obj[key])img.src=obj[key]};
+  up.onclick=()=>file.click();
+  rm.onclick=()=>{obj[key]="";file.value="";if(key==="sigImg"){embed.signatureOrigUrl="";sigBusy=false;status.textContent=""}sync();update()};
+  const status=document.createElement("span"); status.style.color="var(--mute)"; status.style.fontSize="12px";
+  file.onchange=()=>{
+    const f=file.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{
+      if(EMBED && key==="sigImg"){
+        file.value="";
+        if(typeof r.result!=="string"||sigBusy) return;
+        sigBaseline=obj[key]||"";
+        sigBusy=true;
+        status.textContent="Preparing signature…";
+        window.parent.postMessage({type:"editor2:signature",dataUrl:r.result},"*");
+        return;
+      }
+      const im=new Image();im.onload=()=>{
+        const k=Math.min(1,maxW/im.width), c=document.createElement("canvas");
+        c.width=Math.round(im.width*k); c.height=Math.round(im.height*k);
+        c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+        obj[key]=c.toDataURL("image/png"); sync(); update();
+      };im.src=r.result};
+    r.readAsDataURL(f);
+  };
+  if(key==="sigImg"&&sigBusy) status.textContent="Preparing signature…";
+  host.append(img,up,rm,file,status); sync();
+}
+function buildStatic(){
+  fields($("f-issuer"),S.issuer,[["name","Company name","text",1],["address","Address","area",1],["phones","Phones (comma separated)","text",1],["website","Website"],["email","Email"]],update);
+  fields($("f-bill"),S.bill,[["name","Client name"],["role","Role / title"],["address","Address","text",1],["phone","Phone"],["email","Email","email"]],update);
+  fields($("f-meta"),S.meta,[["number","Invoice #"],["date","Date","date"],["currency","Currency code (USD, EUR, KES…)"],["tax","Tax %","number"],["discount","Discount amount","number"]],update);
+  fields($("f-end"),S.end,[["terms","Terms & conditions","area",1],["sigName","Signature name"],["sigRole","Signature role"]],update);
+  uploader($("up-logo"),S.issuer,"logo","logo",400);
+  uploader($("up-sig"),S.end,"sigImg","signature",400);
+}
+
+function buildItems(){
+  const h=$("items"); h.innerHTML="";
+  S.items.forEach((it,idx)=>{
+    const r=document.createElement("div"); r.className="row";
+    r.innerHTML=`<div><label>Description</label><input data-k="description"></div>
+      <div><label>Price <span class="cur"></span></label><input data-k="price" type="number" step="any" inputmode="decimal" placeholder="0.00"></div>
+      <div><label>Qty</label><input data-k="qty" type="number" step="any" inputmode="decimal" placeholder="1"></div>
+      <div><label>Total <span class="cur"></span></label><input class="tt" type="number" step="any" inputmode="decimal" placeholder="0.00"></div>
+      <button class="x" title="Remove">✕</button>
+      <div class="n"><input data-k="note" placeholder="Small note (optional)"></div>`;
+    r.querySelectorAll("[data-k]").forEach(i=>{const v=it[i.dataset.k];i.value=v===0?"":(v??"");i.oninput=()=>{it[i.dataset.k]=i.value;update()}});
+    // typing a Total works backwards: price = total / qty
+    const tt=r.querySelector(".tt"), pr=r.querySelector('[data-k="price"]');
+    tt.oninput=()=>{
+      const q=+it.qty, t=parseFloat(tt.value);
+      if(!q){toast("Enter Qty first");return}
+      it.price=isNaN(t)?"":String(Math.round(t/q*1e6)/1e6);
+      pr.value=it.price; update();
+    };
+    r.querySelector(".x").onclick=()=>{S.items.splice(idx,1);if(!S.items.length)S.items.push({description:"",note:"",qty:1,price:0});buildItems();update()};
+    h.append(r);
+  });
+}
+
+function buildPMs(){
+  const h=$("pms"); h.innerHTML="";
+  S.pms.forEach((pm,pi)=>{
+    const b=document.createElement("div"); b.className="pm";
+    const t=document.createElement("input"); t.value=pm.title; t.placeholder="Title (e.g. Bank Transfer)";
+    t.oninput=()=>{pm.title=t.value;update()}; b.append(t);
+    pm.fields.forEach((f,fi)=>{
+      const k=document.createElement("div"); k.className="kv";
+      k.innerHTML=`<input placeholder="Label"><input placeholder="Value"><button class="x">✕</button>`;
+      const [a,c,x]=k.children; a.value=f.label; c.value=f.value;
+      a.oninput=()=>{f.label=a.value;update()}; c.oninput=()=>{f.value=c.value;update()};
+      x.onclick=()=>{pm.fields.splice(fi,1);buildPMs();update()};
+      b.append(k);
+    });
+    const bar=document.createElement("div"); bar.className="bar";
+    const add=document.createElement("button"); add.textContent="+ Row";
+    add.onclick=()=>{pm.fields.push({label:"",value:""});buildPMs();update()};
+    const del=document.createElement("button"); del.textContent="Remove block";
+    del.onclick=()=>{S.pms.splice(pi,1);buildPMs();update()};
+    bar.append(add,del); b.append(bar); h.append(b);
+  });
+}
+
+function buildPresets(){
+  const h=$("presets"); h.innerHTML="";
+  Object.entries(PRESETS).forEach(([name,labels])=>{
+    const b=document.createElement("button"); b.textContent="+ "+name;
+    b.onclick=()=>{S.pms.push({title:name==="Custom"?"":name,fields:labels.map(l=>({label:l==="Label"?"":l,value:""}))});buildPMs();update()};
+    h.append(b);
+  });
+}
+
+// ---------- Preview ----------
+function render(){
+  const d=formatInvoice(S), m=c=>money(c,d.currency), I=d.issuer, B=d.bill_to;
+  document.querySelectorAll(".tt").forEach((el,i)=>{if(el===document.activeElement)return;const t=d.items[i]?d.items[i].total:0;el.value=t?(t/100).toFixed(2):""});
+  document.querySelectorAll(".cur").forEach(el=>{el.textContent=d.currency?"("+d.currency+")":""});
+  $("paper").innerHTML=`
+  <div class="top"><div>${I.logo?`<img src="${I.logo}" alt="" style="max-height:52px;max-width:160px;display:block;margin-bottom:8px">`:""}<b>${esc(I.name)}</b><br>${esc(I.address).replace(/\n/g,"<br>")}</div><div>${I.phones.map(esc).join("<br>")}<br>${esc(I.email)}</div></div>
+  <h2>INVOICE</h2>
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+   <div><div class="lbl">TO</div><b>${esc(B.name)}</b><small>${esc(B.role)}</small>
+    <div>${esc(B.address)}</div><small>${esc(B.phone)}</small><small>${esc(B.email)}</small></div>
+   <div class="r" style="text-align:right"><div class="lbl">No. ${esc(d.number)}</div><small>${esc(d.date)}</small></div></div>
+  <table><tr><th>ITEM DESCRIPTION</th><th class="r">QTY</th><th class="r">TOTAL</th></tr>
+  ${d.items.map(i=>`<tr><td>${esc(i.description)}<small>${esc(i.note)}</small></td><td class="r">${i.qty}</td><td class="r">${m(i.total)}</td></tr>`).join("")}</table>
+  <div class="sum"><div><span>Subtotal</span><span>${m(d.subtotal)}</span></div>
+  ${d.tax?`<div><span>Tax (${d.tax_percent}%)</span><span>${m(d.tax)}</span></div>`:""}
+  ${d.discount?`<div><span>Discount</span><span>-${m(d.discount)}</span></div>`:""}
+  <div class="t"><span>TOTAL</span><span>${m(d.total)}</span></div></div>
+  ${d.payment_methods.map(p=>`<div class="pmb"><div class="lbl" style="margin-top:0">${esc(p.title).toUpperCase()}</div>${p.fields.map(f=>`<div>${esc(f.label)}${f.label&&f.value?": ":""}${esc(f.value)}</div>`).join("")}</div>`).join("")}
+  ${d.signature.name||d.signature.image?`<div class="sig">${d.signature.image?`<img src="${d.signature.image}" alt="" style="max-height:54px;max-width:200px;display:block;margin-left:auto">`:""}${esc(d.signature.name)}<small><br>${esc(d.signature.role)}</small></div>`:""}
+  ${d.terms?`<div class="terms"><b>Terms &amp; Conditions</b><br>${esc(d.terms)}</div>`:""}`;
+  $("json").textContent=JSON.stringify(d,null,2);
+}
+function toParent(){
+  S.items.forEach(it=>{ if(!it.id) it.id=uid() });
+  const methods=(S.pms||[]).map(p=>({title:p.title||'',fields:(p.fields||[]).map(f=>({label:f.label||'',value:f.value||''}))}));
+  const first=methods[0];
+  return {
+    id:embed.id, no:S.meta.number, date:S.meta.date, status:embed.status, clientId:embed.clientId,
+    company:{name:S.issuer.name,tagline:embed.tagline,address:S.issuer.address,phones:S.issuer.phones,website:S.issuer.website,email:S.issuer.email},
+    from:{name:S.issuer.name,phone:S.issuer.phones,email:S.issuer.email},
+    to:{name:S.bill.name,role:S.bill.role,address:S.bill.address,phone:S.bill.phone,email:S.bill.email},
+    items:S.items.map(it=>({id:it.id,desc:it.description||'',note:it.note||'',price:+it.price||0,qty:+it.qty||0})),
+    tax:+S.meta.tax||0, currency:S.meta.currency||'USD', discount:+S.meta.discount||0,
+    bank:{
+      name:first?first.title:'',
+      code:first?first.fields.map(f=>[f.label,f.value].filter(Boolean).join(': ')).filter(Boolean).join('\n'):''
+    },
+    paymentMethods:methods,
+    terms:S.end.terms, signer:S.end.sigName, signerRole:S.end.sigRole,
+    logoUrl:S.issuer.logo||'', signatureUrl:S.end.sigImg||'', signatureOrigUrl:embed.signatureOrigUrl||''
+  };
+}
+function fromParent(inv){
+  const methods=Array.isArray(inv.paymentMethods)&&inv.paymentMethods.length?inv.paymentMethods
+    :(inv.bank&&(inv.bank.name||inv.bank.code)?[{title:inv.bank.name||'Bank',fields:inv.bank.code?[{label:'Details',value:inv.bank.code}]:[]}]:[]);
+  return {
+    issuer:{
+      name:inv.company&&inv.company.name||'',
+      address:inv.company&&inv.company.address||'',
+      phones:inv.company&&inv.company.phones||inv.from&&inv.from.phone||'',
+      website:inv.company&&inv.company.website||'',
+      email:inv.company&&inv.company.email||inv.from&&inv.from.email||'',
+      logo:inv.logoUrl||''
+    },
+    bill:{
+      name:inv.to&&inv.to.name||'', role:inv.to&&inv.to.role||'', address:inv.to&&inv.to.address||'',
+      phone:inv.to&&inv.to.phone||'', email:inv.to&&inv.to.email||''
+    },
+    meta:{
+      number:inv.no||'', date:inv.date||'', currency:inv.currency||'USD',
+      tax:inv.tax||0, discount:inv.discount||0
+    },
+    items:(inv.items&&inv.items.length?inv.items:[{id:uid(),desc:'',note:'',price:0,qty:1}]).map(it=>({
+      id:it.id||uid(), description:it.desc||it.description||'', note:it.note||'', qty:it.qty, price:it.price
+    })),
+    pms:methods.map(p=>({title:p.title||'',fields:(p.fields||[]).map(f=>({label:f.label||'',value:f.value||''}))})),
+    end:{terms:inv.terms||'', sigName:inv.signer||'', sigRole:inv.signerRole||'', sigImg:inv.signatureUrl||''}
+  };
+}
+function update(){
+  render();
+  if(EMBED){
+    if(!embed.ready) return;
+    window.parent.postMessage({type:'editor2:update',invoice:toParent()},'*');
+  }else store.set("inv_draft",S);
+}
+function rebuild(){buildStatic();buildItems();buildPMs();render()}
+
+// ---------- Buttons ----------
+$("addItem").onclick=()=>{S.items.push({id:uid(),description:"",note:"",qty:1,price:0});buildItems();update()};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText($("json").textContent);toast("Copied")}catch(e){toast("Select the text and copy")}};
+$("reset").onclick=()=>{const keep=S.issuer,keepPm=S.pms,keepEnd=S.end;S=blank();S.issuer=keep;S.pms=keepPm;S.end=keepEnd;rebuild();update();toast("New invoice (company kept)")};
+$("saveProfile").onclick=()=>{store.set("inv_profile",{issuer:S.issuer,pms:S.pms,end:S.end});toast("Company profile saved")};
+$("loadProfile").onclick=()=>{const p=store.get("inv_profile");if(!p)return toast("No saved profile yet");Object.assign(S,p);rebuild();update();toast("Profile loaded")};
+
+// ---------- Init ----------
+if(!EMBED){ const draft=store.get("inv_draft"); if(draft) S=Object.assign(blank(),draft); }
+buildPresets(); rebuild();
+if(EMBED){
+  document.addEventListener("keydown",e=>{
+    const cmd=e.metaKey||e.ctrlKey; if(!cmd) return;
+    const key=e.key.toLowerCase();
+    if(key==="s"){e.preventDefault();window.parent.postMessage({type:"editor2:save"},"*")}
+    else if(key==="z"&&!e.shiftKey){e.preventDefault();window.parent.postMessage({type:"editor2:undo"},"*")}
+    else if((key==="z"&&e.shiftKey)||key==="y"){e.preventDefault();window.parent.postMessage({type:"editor2:redo"},"*")}
+  });
+  window.addEventListener("message",e=>{
+    if(e.source!==window.parent) return;
+    const d=e.data;
+    if(!d||d.type!=="editor2:hydrate"||!d.invoice) return;
+    const inv=d.invoice;
+    if(sigBusy&&inv.signatureUrl&&inv.signatureUrl!==sigBaseline) sigBusy=false;
+    embed.id=inv.id||"";
+    embed.status=inv.status||"Draft";
+    embed.clientId=inv.clientId||"";
+    embed.tagline=inv.company&&inv.company.tagline||"";
+    embed.signatureOrigUrl=inv.signatureOrigUrl||"";
+    embed.ready=true;
+    S=fromParent(inv);
+    rebuild();
+  });
+}
+</script>
+</body>
+</html>
