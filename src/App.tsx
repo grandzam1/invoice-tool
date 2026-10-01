@@ -37,10 +37,22 @@ import {
   runConnectionSelfTest,
 } from './services/invoiceService';
 import { InvoiceCanvas, parseCurrencyAmount, formatCurrencyAmount } from './components/InvoiceCanvas';
+import { DocumentTypeForm } from './components/DocumentTypeForm';
+import { DocumentTypeUpload } from './components/DocumentTypeUpload';
 import { TemplatePreview, TemplatePreviewHandle } from './components/TemplatePreview';
+import {
+  applyDocumentFields,
+  blankDocumentDraft,
+  DocumentField,
+  readDocumentItems,
+  readDocumentValues,
+  StoredDocumentType,
+} from './templates/documentFields';
 import { Editor2Host } from './components/Editor2Host';
+import { openPrintRoute, rememberPrintPayload } from './print/openPrint';
 import { EditorSettings } from './components/EditorSettings';
 import { Dashboard } from './components/Dashboard';
+import { authHeaders } from './firebase';
 import { cn } from './lib/utils';
 
 const DESIGN_WIDTH = 800;
@@ -77,7 +89,10 @@ function withSnapshot(invoice: InvoiceDocument, snapshot: HistorySnapshot): Invo
 
 export default function App() {
   // Navigation: 'dashboard' | 'editor'
-  const [currentView, setCurrentView] = useState<'dashboard' | 'editor'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'editor' | 'upload'>('dashboard');
+  const [documentTypes, setDocumentTypes] = useState<StoredDocumentType[]>([]);
+  const [selectedTypeId, setSelectedTypeId] = useState('invoice1');
+  const [typeDrafts, setTypeDrafts] = useState<Record<string, ReturnType<typeof blankDocumentDraft>>>({});
 
   // Invoices state
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([]);
@@ -132,11 +147,39 @@ export default function App() {
     }
   }, []);
 
+  const loadDocumentTypes = useCallback(async () => {
+    try {
+      const response = await fetch('/api/document-types', { headers: await authHeaders() });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!Array.isArray(data)) return;
+      const types = data.filter((item): item is StoredDocumentType => {
+        if (!item || typeof item !== 'object') return false;
+        const type = item as StoredDocumentType;
+        return typeof type.id === 'string' && typeof type.name === 'string' && typeof type.html === 'string' && Array.isArray(type.fields) && Array.isArray(type.themes);
+      }).map((type) => ({
+        ...type,
+        fields: type.fields.filter((field): field is DocumentField => Boolean(field) && typeof field.key === 'string' && typeof field.label === 'string'),
+        themes: type.themes.filter((theme): theme is string => typeof theme === 'string'),
+      }));
+      setDocumentTypes(types);
+    } catch {
+      setDocumentTypes([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadInvoices();
+    loadDocumentTypes();
     // Phase 2.3: Non-blocking connection self-test against Firestore and Cloud Storage
     runConnectionSelfTest();
-  }, [loadInvoices]);
+  }, [loadInvoices, loadDocumentTypes]);
+
+  useEffect(() => {
+    const type = documentTypes.find((item) => item.id === selectedTypeId);
+    if (!type || type.id === 'invoice1' || typeDrafts[type.id]) return;
+    setTypeDrafts((prev) => (prev[type.id] ? prev : { ...prev, [type.id]: blankDocumentDraft(type) }));
+  }, [documentTypes, selectedTypeId, typeDrafts]);
 
   // Dynamically observe and measure canvas height as content expands
   useEffect(() => {
@@ -390,6 +433,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentView, handleUndo, handleRedo, currentInvoice]);
 
+  const selectedDocumentType = documentTypes.find((type) => type.id === selectedTypeId) ?? null;
+  const invoiceDocumentType = documentTypes.find((type) => type.id === 'invoice1') ?? null;
+  const formDocumentType = selectedDocumentType ?? invoiceDocumentType;
+  const customType = selectedDocumentType != null && selectedDocumentType.id !== 'invoice1';
+  const customDraft = customType ? typeDrafts[selectedDocumentType.id] : null;
+
+  const handleTypeUploaded = async (id: string) => {
+    await loadDocumentTypes();
+    setSelectedTypeId(id);
+    setTemplatePreviewOpen(true);
+    if (!currentInvoice && invoices[0]) setCurrentInvoice(invoices[0]);
+    setCurrentView('editor');
+  };
+
+  const handleDocumentChange = (next: InvoiceDocument) => {
+    if (!currentInvoice) return;
+    setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
+    setRedoStack([]);
+    setCurrentInvoice(next);
+    setSaveStatus('dirty');
+  };
+
   const handleEditor2Change = (next: InvoiceDocument) => {
     if (!currentInvoice) return;
     setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
@@ -403,13 +468,17 @@ export default function App() {
     writeEditorMode(next);
   };
 
-  // Print invoice. Editor 2 prints the preview iframe; classic prints the canvas.
   const handlePrint = () => {
-    if (editorMode === 'editor2') {
-      previewRef.current?.print();
-      return;
-    }
-    window.print();
+    if (!currentInvoice) return;
+    const typeId = selectedTypeId.startsWith('builtin:') ? 'invoice1' : selectedTypeId;
+    const theme = previewRef.current?.theme() || 'classic';
+    rememberPrintPayload({
+      typeId,
+      theme,
+      invoice: currentInvoice,
+      draft: customType && selectedDocumentType?.id === typeId ? customDraft : null,
+    });
+    openPrintRoute(currentInvoice.id, typeId, theme);
   };
 
   const filteredSidebarInvoices = invoices.filter((inv) => {
@@ -444,9 +513,19 @@ export default function App() {
           invoices={invoices}
           onOpenInvoice={handleOpenInvoice}
           onCreateInvoice={handleCreateNewInvoice}
+          onUploadDocumentType={() => setCurrentView('upload')}
           onDuplicateInvoice={handleDuplicateInvoice}
           onDeleteInvoice={handleDeleteInvoice}
           loading={loading}
+        />
+      )}
+
+      {currentView === 'upload' && (
+        <DocumentTypeUpload
+          onCancel={() => setCurrentView('dashboard')}
+          onUploaded={(id) => {
+            void handleTypeUploaded(id);
+          }}
         />
       )}
 
@@ -940,11 +1019,32 @@ export default function App() {
               </>
             )}
 
+            {formDocumentType && !customType && (
+              <DocumentTypeForm
+                name={formDocumentType.name}
+                fields={formDocumentType.fields}
+                values={readDocumentValues(currentInvoice)}
+                items={readDocumentItems(currentInvoice)}
+                onChange={(values, items) => handleDocumentChange(applyDocumentFields(currentInvoice, values, items))}
+              />
+            )}
+            {customType && selectedDocumentType && customDraft && (
+              <DocumentTypeForm
+                name={selectedDocumentType.name}
+                fields={selectedDocumentType.fields}
+                values={customDraft.values}
+                items={customDraft.items}
+                onChange={(values, items) => {
+                  setTypeDrafts((prev) => ({ ...prev, [selectedDocumentType.id]: { values, items } }));
+                }}
+              />
+            )}
+
             {/* INVOICE CANVAS WORKSPACE: Scroll vertically with fixed width and expanding height */}
             <div
               id="invoice-viewport-wrapper"
               ref={viewportWrapperRef}
-              style={editorMode === 'editor2' ? { display: 'none' } : undefined}
+              style={editorMode === 'editor2' || customType ? { display: 'none' } : undefined}
               className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden flex justify-center items-start py-4 sm:py-8 px-2 sm:px-4 bg-[#09090b]"
             >
               {/* The scaled box matching exact computed pixel boundaries */}
@@ -984,7 +1084,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-            {editorMode === 'editor2' && (
+            {editorMode === 'editor2' && !customType && (
               <Editor2Host
                 invoice={currentInvoice}
                 invoices={invoices}
@@ -1005,6 +1105,10 @@ export default function App() {
               invoice={currentInvoice}
               open={templatePreviewOpen}
               onClose={() => setTemplatePreviewOpen(false)}
+              documentTypes={documentTypes}
+              selectedTypeId={selectedTypeId}
+              onSelectType={setSelectedTypeId}
+              draft={customDraft}
             />
           </div>
         </div>

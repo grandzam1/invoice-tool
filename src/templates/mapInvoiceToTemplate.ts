@@ -64,18 +64,8 @@ export function mapInvoiceToTemplate(invoice: InvoiceDocument): TemplateInvoiceV
       });
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  let taxAmount = 0;
-  let total = subtotal;
-  if (editor2) {
-    taxAmount = subtotal * ((Number(editor2.tax) || 0) / 100);
-    total = subtotal + taxAmount - (Number(editor2.discount) || 0);
-  } else {
-    const overrideText = content.grandTotalOverride;
-    const hasOverride = overrideText != null && String(overrideText).trim() !== '';
-    const overrideTotal = hasOverride ? parseCurrencyAmount(overrideText) : subtotal;
-    total = hasOverride ? overrideTotal : subtotal;
-    taxAmount = hasOverride && overrideTotal > subtotal ? overrideTotal - subtotal : 0;
-  }
+  const taxAmount = editor2 ? subtotal * ((Number(editor2.tax) || 0) / 100) : 0;
+  const total = subtotal + taxAmount;
 
   const paymentSection = (content.sections || []).find((section) => /payment/i.test(section.title || ''));
   const paymentLines = (paymentSection?.lines || [])

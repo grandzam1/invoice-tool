@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700;800&family=Lora:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  :root {
+    --hdr-bg:#111111; --hdr-fg:#FFFFFF; --hdr-line:transparent; --badge:#FFFFFF;
+    --th-bg:#111111;  --th-fg:#FFFFFF;
+    --band:#DEDEDE;   --paper:#F7F7F7; --frame:#FFFFFF;
+    --accent:#111111; --ink:#111111;   --muted:#111111; --rule:#111111;
+    --fh:'Montserrat',Arial,sans-serif;
+    --fb:'Inter',Arial,sans-serif;
+  }
+  [data-theme="outline"] {
+    --hdr-bg:#FFFFFF; --hdr-fg:#000000; --hdr-line:#000000; --badge:#000000;
+    --th-bg:#000000;  --th-fg:#FFFFFF;
+    --band:#EDEDED;   --paper:#FFFFFF; --frame:#000000;
+    --accent:#000000; --ink:#000000;   --muted:#000000; --rule:#000000;
+    --fh:'Space Grotesk',Arial,sans-serif;
+    --fb:'Space Grotesk',Arial,sans-serif;
+  }
+  [data-theme="negative"] {
+    --hdr-bg:#FFFFFF; --hdr-fg:#000000; --hdr-line:transparent; --badge:#000000;
+    --th-bg:#FFFFFF;  --th-fg:#000000;
+    --band:#1E1E1E;   --paper:#000000; --frame:#000000;
+    --accent:#FFFFFF; --ink:#FFFFFF;   --muted:#FFFFFF; --rule:#FFFFFF;
+    --fh:'Manrope',Arial,sans-serif;
+    --fb:'Manrope',Arial,sans-serif;
+  }
+  [data-theme="editorial"] {
+    --hdr-bg:#E9E9E9; --hdr-fg:#111111; --hdr-line:transparent; --badge:#111111;
+    --th-bg:#111111;  --th-fg:#FFFFFF;
+    --band:#F0F0F0;   --paper:#FFFFFF; --frame:#FFFFFF;
+    --accent:#111111; --ink:#111111;   --muted:#111111; --rule:#111111;
+    --fh:'Lora',Georgia,serif;
+    --fb:'Lora',Georgia,serif;
+  }
+  [data-theme="dark"] {
+    --hdr-bg:#000000; --hdr-fg:#FFFFFF; --hdr-line:#2A2A2D; --badge:#FFFFFF;
+    --th-bg:#2B2B2F;  --th-fg:#FFFFFF;
+    --band:#1C1C1F;   --paper:#0E0E10; --frame:#0E0E10;
+    --accent:#F2F2F2; --ink:#F2F2F2;   --muted:#F2F2F2; --rule:#F2F2F2;
+    --fh:'Montserrat',Arial,sans-serif;
+    --fb:'Inter',Arial,sans-serif;
+  }
+
+  .sheet    { background:var(--paper); font-family:var(--fh); }
+  .fb       { font-family:var(--fb); }
+  .hdr-bg   { background:var(--hdr-bg); border-bottom:2px solid var(--hdr-line); }
+  .hdr-fg   { color:var(--hdr-fg); }
+  .badge    { border:1px solid var(--badge); color:var(--hdr-fg); z-index:2; overflow:hidden; box-sizing:border-box; }
+  .th       { background:var(--th-bg); color:var(--th-fg); }
+  .band     { background:var(--band); }
+  .paper    { background:var(--paper); }
+  .frame    { border:7px solid var(--frame); background:var(--paper); }
+  .accent   { color:var(--accent); }
+  .ink      { color:var(--ink); }
+  .muted    { color:var(--muted); }
+  .rule-t   { border-top:1px solid var(--rule); }
+  .vertical { writing-mode:vertical-rl; transform:rotate(180deg); max-height:100%; line-height:1; }
+
+  #logo-img.is-default { filter:brightness(0) invert(1); }
+  [data-theme="outline"] #logo-img.is-default,
+  [data-theme="negative"] #logo-img.is-default,
+  [data-theme="editorial"] #logo-img.is-default { filter:brightness(0); }
+
+  html.is-embed, html.is-embed body { height:100%; margin:0; overflow:hidden; background:#151517; }
+  html.is-embed body { padding:0 !important; }
+  html.is-embed #sheet-scroll {
+    height:100%; overflow:hidden;
+    display:flex; align-items:flex-start; justify-content:center;
+  }
+  html.is-embed #sheet { margin:0; flex-shrink:0; box-shadow:none; }
+
+  @media print {
+    html, body, html.is-embed, html.is-embed body {
+      width:210mm !important; height:297mm !important;
+      overflow:hidden !important;
+      margin:0 !important; padding:0 !important; background:#fff !important;
+    }
+    html.is-embed #sheet-scroll, #sheet-scroll {
+      height:297mm !important; overflow:hidden !important; display:block !important;
+    }
+    #sheet, .sheet {
+      width:210mm !important; height:297mm !important;
+      box-shadow:none !important; margin:0 !important; transform:none !important;
+    }
+  }
+</style>
+</head>
+<body class="bg-neutral-300 antialiased py-4 print:py-0">
+
+<div id="sheet-scroll" class="overflow-x-auto">
+<main id="sheet" class="sheet relative mx-auto h-[297mm] w-[210mm] shrink-0 overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.15)]">
+
+  <div class="hdr-bg absolute inset-x-0 top-0 h-[144.5mm]"></div>
+
+  <div class="hdr-fg absolute left-[12.3mm] top-[14mm]">
+    <img id="logo-img" src="{{logo_url}}" alt="Company Logo" style="display:{{logo_display}}" class="is-default block h-[22px] w-auto max-w-[70mm] object-contain">
+    <p class="text-[13px] font-bold uppercase leading-none" style="display:{{company_display}}">{{company_name}}</p>
+    <p class="mt-1 text-[6px] uppercase tracking-wide" style="display:{{tagline_display}}">{{tagline}}</p>
+  </div>
+  <div class="hdr-fg fb absolute right-[52mm] top-[16mm] text-right text-[10.5px] leading-snug">
+    <p>Invoice No: <span class="ml-1">{{invoice_number}}</span></p>
+    <p>Date: <span class="ml-1">{{invoice_date}}</span></p>
+  </div>
+
+  <div class="badge absolute left-[168mm] top-[5mm] flex h-[78.5mm] w-[29.5mm] items-center justify-center px-[3mm] py-[6mm]">
+    <span class="vertical text-[36px] font-extrabold uppercase leading-none tracking-wide">Invoice</span>
+  </div>
+
+  <div class="hdr-fg absolute left-[12.3mm] top-[44mm]">
+    <p class="text-[13px] font-normal">Invoice To:</p>
+    <p class="mt-2.5 text-[14px] font-bold uppercase">{{client_name}}</p>
+    <p class="fb mt-2 text-[12px] leading-relaxed">{{client_phone}}<br>{{client_email}}</p>
+  </div>
+  <div class="hdr-fg absolute left-[108mm] top-[44mm] w-[54mm] break-words">
+    <p class="text-[13px] font-normal">Invoice From:</p>
+    <p class="mt-2.5 text-[14px] font-bold uppercase">{{from_name}}</p>
+    <p class="fb mt-2 text-[12px] leading-relaxed">{{from_phone}}<br>{{from_email}}</p>
+  </div>
+
+  <div class="absolute left-[12.7mm] top-[88mm] w-[184.5mm]">
+
+    <div class="frame">
+      <div class="th grid grid-cols-[1fr_125px_115px_122px] items-center py-[13px] text-[13px] font-bold uppercase">
+        <span class="pl-[26px]">Description</span>
+        <span class="text-center">Price</span>
+        <span class="text-center">Qty</span>
+        <span class="text-center">Amount</span>
+      </div>
+
+      <template data-repeat="items">
+        <div class="paper grid h-[67px] grid-cols-[1fr_125px_115px_122px] items-center">
+          <span class="pl-[32px]">{{description}}</span>
+          <span class="text-center">{{price}}</span>
+          <span class="text-center">{{qty}}</span>
+          <span class="text-center">{{line_total}}</span>
+        </div>
+      </template>
+      <div id="line-items" class="fb ink text-[15px]"></div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between">
+      <div class="accent mt-[22mm]">
+        <p class="text-[13px] font-medium">Payment Info:</p>
+        <div class="accent-bg mb-2.5 mt-1 h-px w-[26mm]"></div>
+        <p class="fb muted text-[10.5px] leading-snug">
+          <span class="inline-block w-[24mm]">Bank Name:</span><span>{{bank_name}}</span><br>
+          <span class="inline-block w-[24mm]">Bank Code:</span><span class="whitespace-pre-line">{{bank_code}}</span>
+        </p>
+      </div>
+
+      <div class="fb muted w-[62mm] text-[11px]">
+        <div class="band flex h-[40px] items-center justify-between pl-3 pr-8">
+          <span class="uppercase">Subtotal :</span><span class="ink font-bold">{{subtotal}}</span>
+        </div>
+        <div class="flex h-[40px] items-center justify-between pl-3 pr-8">
+          <span class="ml-auto mr-10 uppercase">Tax :</span><span class="ink font-bold">{{tax}}</span>
+        </div>
+        <div class="band flex h-[40px] items-center justify-between pl-3 pr-8">
+          <span class="ink ml-auto mr-10 font-bold uppercase">Total :</span><span class="ink font-bold">{{total}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="absolute inset-x-[12.3mm] bottom-[16mm] flex items-end justify-between">
+    <div class="accent w-[100mm]">
+      <p class="text-[12px] font-bold uppercase">Terms &amp; Conditions:</p>
+      <div class="accent-bg mb-2.5 mt-1 h-px w-[15mm]"></div>
+      <p class="fb ink whitespace-pre-wrap text-[9px] leading-snug">{{terms}}</p>
+    </div>
+    <div class="fb muted rule-t mr-[5mm] w-[40mm] pt-2 text-center text-[10.5px]">
+      <img src="{{signature_url}}" alt="" class="mx-auto mb-1 h-16 max-w-full object-contain {{signature_hidden}}">
+      <p class="mb-1 text-[11px] font-semibold {{signer_hidden}}">{{signer_name}}</p>
+      Authorised Sign
+    </div>
+  </div>
+
+</main>
+</div>
+
+</body>
+</html>

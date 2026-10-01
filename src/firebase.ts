@@ -1,9 +1,16 @@
 import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { firebaseConfig } from './config/env';
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
+
+export async function authHeaders(): Promise<Record<string, string>> {
+  const user = getAuth(app).currentUser;
+  if (!user) return {};
+  return { Authorization: `Bearer ${await user.getIdToken()}` };
+}
 
 // CRITICAL: The app will break without specifying the firestoreDatabaseId
 // Using experimentalForceLongPolling avoids WebChannel streaming proxy buffering issues

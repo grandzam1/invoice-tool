@@ -1,15 +1,15 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { InvoiceDocument } from '../types';
+import { fillDocumentTemplate, fillFromValues } from '../templates/fillDocument';
+import { DocumentItemRow, StoredDocumentType } from '../templates/documentFields';
 import { mapInvoiceToTemplate, TemplateInvoiceView } from '../templates/mapInvoiceToTemplate';
 import invoice1Html from '../templates/invoice1.html?raw';
 import invoice2Html from '../templates/invoice2.html?raw';
 
-const TEMPLATES = [
-  { id: 'invoice1', label: 'Invoice 1', srcDoc: invoice1Html },
-  { id: 'invoice2', label: 'Invoice 2', srcDoc: invoice2Html },
+const BUILTIN_TEMPLATES = [
+  { id: 'builtin:invoice1', label: 'Invoice 1', srcDoc: invoice1Html },
+  { id: 'builtin:invoice2', label: 'Invoice 2', srcDoc: invoice2Html },
 ] as const;
-
-type TemplateId = (typeof TEMPLATES)[number]['id'];
 
 type TemplateFrameWindow = Window & {
   fillInvoice?: (view: TemplateInvoiceView) => void;
@@ -19,19 +19,82 @@ interface TemplatePreviewProps {
   invoice: InvoiceDocument;
   open: boolean;
   onClose: () => void;
+  documentTypes: StoredDocumentType[];
+  selectedTypeId: string;
+  onSelectType: (id: string) => void;
+  draft: { values: Record<string, string>; items: DocumentItemRow[] } | null;
 }
 
 export interface TemplatePreviewHandle {
   print: () => void;
+  usingDocumentTemplate: () => boolean;
+  theme: () => string;
 }
 
 export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreviewProps>(
-  function TemplatePreview({ invoice, open, onClose }, ref) {
+  function TemplatePreview({ invoice, open, onClose, documentTypes, selectedTypeId, onSelectType, draft }, ref) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [templateId, setTemplateId] = useState<TemplateId>(TEMPLATES[0].id);
-  const template = TEMPLATES.find((item) => item.id === templateId) ?? TEMPLATES[0];
+  const [theme, setTheme] = useState('classic');
+  const documentType = documentTypes.find((item) => item.id === selectedTypeId) ?? null;
+  const builtin = BUILTIN_TEMPLATES.find((item) => item.id === selectedTypeId) ?? null;
+  const isDocument = documentType != null;
+  const themes = documentType?.themes?.length ? documentType.themes : ['classic'];
+
+  const filledDocument = useMemo(() => {
+    if (!documentType) return '';
+    if (documentType.id === 'invoice1') return fillDocumentTemplate(documentType.html, invoice, { embed: true });
+    const values = draft?.values || {};
+    const items = (draft?.items || []).map((item) => item.values);
+    return fillFromValues(documentType.html, values, items, { embed: true });
+  }, [documentType, invoice, draft]);
+
+  const srcDoc = isDocument ? filledDocument : builtin?.srcDoc || '';
+
+  const fitSheet = () => {
+    const frame = frameRef.current;
+    const sheet = frame?.contentDocument?.getElementById('sheet');
+    if (!frame || !sheet) return;
+    const width = sheet.offsetWidth;
+    const height = sheet.offsetHeight;
+    if (!width || !height) return;
+    const scale = Math.min(frame.clientWidth / width, Math.max(0.1, frame.clientHeight / height));
+    const extraWidth = width * (1 - scale);
+    const extraHeight = height * (1 - scale);
+    sheet.style.transformOrigin = 'top center';
+    sheet.style.transform = `scale(${scale})`;
+    sheet.style.marginLeft = `${-extraWidth / 2}px`;
+    sheet.style.marginRight = `${-extraWidth / 2}px`;
+    sheet.style.marginBottom = `${-extraHeight}px`;
+  };
+
+  const resetSheet = () => {
+    const sheet = frameRef.current?.contentDocument?.getElementById('sheet');
+    if (!sheet) return;
+    sheet.style.transform = 'none';
+    sheet.style.marginLeft = '0';
+    sheet.style.marginRight = '0';
+    sheet.style.marginBottom = '0';
+  };
+
+  const applyTheme = (name: string) => {
+    const doc = frameRef.current?.contentDocument;
+    if (!doc?.documentElement) return;
+    const sheet = doc.getElementById('sheet');
+    if (!name || name === 'classic') {
+      doc.documentElement.removeAttribute('data-theme');
+      sheet?.removeAttribute('data-theme');
+      return;
+    }
+    doc.documentElement.setAttribute('data-theme', name);
+    sheet?.setAttribute('data-theme', name);
+  };
 
   const paint = () => {
+    if (isDocument) {
+      applyTheme(theme);
+      fitSheet();
+      return;
+    }
     const frameWindow = frameRef.current?.contentWindow as TemplateFrameWindow | null;
     if (frameWindow?.fillInvoice) {
       frameWindow.fillInvoice(mapInvoiceToTemplate(invoice));
@@ -39,19 +102,35 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
   };
 
   useImperativeHandle(ref, () => ({
+    usingDocumentTemplate: () => isDocument,
+    theme: () => theme,
     print: () => {
       const frameWindow = frameRef.current?.contentWindow;
-      if (frameWindow) frameWindow.print();
-      else window.print();
+      if (!frameWindow) {
+        window.print();
+        return;
+      }
+      if (isDocument) resetSheet();
+      frameWindow.print();
     },
   }));
 
   const openInNewTab = () => {
-    const view = mapInvoiceToTemplate(invoice);
     const popup = window.open('', '_blank');
     if (!popup) return;
+    if (isDocument && documentType) {
+      const html = documentType.id === 'invoice1'
+        ? fillDocumentTemplate(documentType.html, invoice, { embed: false })
+        : fillFromValues(documentType.html, draft?.values || {}, (draft?.items || []).map((item) => item.values), { embed: false });
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+      return;
+    }
+    if (!builtin) return;
+    const view = mapInvoiceToTemplate(invoice);
     popup.document.open();
-    popup.document.write(template.srcDoc);
+    popup.document.write(builtin.srcDoc);
     popup.document.close();
     const apply = () => {
       const target = popup as TemplateFrameWindow;
@@ -67,24 +146,41 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
   };
 
   useEffect(() => {
+    setTheme(themes[0] || 'classic');
+  }, [selectedTypeId]);
+
+  useEffect(() => {
     paint();
-  }, [invoice, template.id, template.srcDoc, open]);
+  }, [invoice, selectedTypeId, srcDoc, open, theme]);
+
+  useEffect(() => {
+    if (!isDocument) return;
+    const onResize = () => fitSheet();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isDocument, srcDoc]);
 
   return (
     <aside
       className={`template-preview flex h-full min-h-0 min-w-0 flex-col border-l border-zinc-800 bg-[#09090b] ${open ? '' : 'max-lg:hidden'}`}
     >
-      <div className="h-12 px-3 border-b border-zinc-800 flex items-center gap-2 shrink-0">
+      <div className="px-3 py-2 border-b border-zinc-800 flex flex-col gap-2 shrink-0">
+        <div className="flex items-center gap-2">
         <label htmlFor="template-picker" className="text-[11px] uppercase tracking-wider text-zinc-500 shrink-0">
           Template
         </label>
         <select
           id="template-picker"
-          value={templateId}
-          onChange={(event) => setTemplateId(event.target.value as TemplateId)}
+          value={selectedTypeId}
+          onChange={(event) => onSelectType(event.target.value)}
           className="h-8 min-w-0 flex-1 bg-zinc-900 border border-zinc-800 rounded-md px-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"
         >
-          {TEMPLATES.map((item) => (
+          {documentTypes.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+          {BUILTIN_TEMPLATES.map((item) => (
             <option key={item.id} value={item.id}>
               {item.label}
             </option>
@@ -104,15 +200,37 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
         >
           Close
         </button>
+        </div>
+        {isDocument && (
+          <div className="flex flex-wrap gap-1" role="tablist" aria-label="Invoice design">
+            {themes.map((name) => (
+              <button
+                key={name}
+                type="button"
+                role="tab"
+                aria-selected={theme === name}
+                onClick={() => setTheme(name)}
+                className={`h-7 px-2.5 text-[11px] font-medium rounded-full border cursor-pointer ${theme === name ? 'bg-zinc-100 text-zinc-900 border-zinc-100' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              >
+                {name.charAt(0).toUpperCase() + name.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="template-preview-stage">
         <div className="template-preview-frame">
           <iframe
-            key={template.id}
+            key={selectedTypeId}
             ref={frameRef}
             title="Invoice template preview"
-            srcDoc={template.srcDoc}
-            onLoad={paint}
+            srcDoc={srcDoc}
+            onLoad={() => {
+              paint();
+              const frameWindow = frameRef.current?.contentWindow;
+              frameWindow?.addEventListener('beforeprint', resetSheet);
+              frameWindow?.addEventListener('afterprint', fitSheet);
+            }}
             className="template-preview-iframe"
           />
         </div>

@@ -28,6 +28,7 @@ interface DashboardProps {
   invoices: InvoiceDocument[];
   onOpenInvoice: (invoiceId: string) => void;
   onCreateInvoice: () => void;
+  onUploadDocumentType: () => void;
   onDuplicateInvoice: (invoice: InvoiceDocument) => void;
   onDeleteInvoice: (invoiceId: string) => void;
   loading: boolean;
@@ -37,6 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   invoices,
   onOpenInvoice,
   onCreateInvoice,
+  onUploadDocumentType,
   onDuplicateInvoice,
   onDeleteInvoice,
   loading,
@@ -223,6 +225,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           {/* New Invoice Button: Simple '+' on mobile screens, '+ New Invoice' on desktop (md: and up) */}
+          <button
+            type="button"
+            onClick={onUploadDocumentType}
+            className="inline-flex items-center justify-center border border-zinc-700 text-zinc-200 hover:bg-zinc-800 font-medium text-xs h-8 px-3 rounded-md transition-colors cursor-pointer shrink-0"
+            title="Upload document type"
+            aria-label="Upload document type"
+          >
+            Upload type
+          </button>
           <button
             onClick={onCreateInvoice}
             className="inline-flex items-center justify-center bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium text-xs h-8 w-8 md:w-auto md:px-3 rounded-md transition-colors shadow-xs cursor-pointer shrink-0"
