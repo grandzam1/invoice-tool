@@ -12,8 +12,7 @@ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:en
 *{box-sizing:border-box}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-.wrap{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr}
-@media(min-width:900px){.wrap{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}.sticky{position:sticky;top:16px}}
+.wrap{max-width:760px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr}
 h1{font-size:20px;margin:0 0 4px}
 .hint{color:var(--mute);font-size:13px;margin:0 0 12px}
 details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px}
@@ -38,28 +37,10 @@ button.x{padding:6px 10px;color:var(--mute)}
 .tot{display:flex;justify-content:space-between;padding:4px 0;color:var(--mute)}
 .tot b{color:var(--ink)}
 .tot.big{font-size:17px;border-top:2px solid var(--ink);margin-top:6px;padding-top:8px;color:var(--ink)}
-/* preview */
-.paper{background:#fff;color:#1a1a1a;border-radius:6px;padding:28px 24px;box-shadow:0 2px 14px #0002;font-size:13px}
-.paper h2{letter-spacing:.15em;font-size:22px;margin:24px 0}
-.paper .top{display:flex;justify-content:space-between;gap:12px;color:#555;font-size:12px}
-.paper .lbl{letter-spacing:.2em;font-size:11px;font-weight:700;margin:16px 0 6px}
-.paper table{width:100%;border-collapse:collapse;margin-top:8px}
-.paper th{text-align:left;font-size:11px;letter-spacing:.1em;padding:8px 4px;border-top:2px solid #1a1a1a;border-bottom:1px solid #ddd}
-.paper td{padding:8px 4px;border-bottom:1px solid #eee;vertical-align:top}
-.paper .r{text-align:right}
-.paper small{color:#888;display:block}
-.paper .sum{margin-left:auto;width:min(260px,100%);margin-top:8px}
-.paper .sum div{display:flex;justify-content:space-between;padding:5px 4px}
-.paper .sum .t{border-top:2px solid #1a1a1a;font-weight:700}
-.paper .pmb{border-top:2px solid #1a1a1a;margin-top:16px;padding-top:6px;max-width:260px}
-.paper .pmb div{color:#666;font-size:12px}
-.paper .sig{text-align:right;margin-top:22px;font-style:italic;font-family:"Brush Script MT",cursive;font-size:24px}
-.paper .sig small{font:12px system-ui;font-style:normal}
-.paper .terms{border-top:1px solid #ddd;margin-top:18px;padding-top:8px;color:#777;font-size:11px}
 .up{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .up img{max-height:72px;max-width:220px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:3px}
 .up input{display:none}
-pre{background:var(--soft);padding:12px;border-radius:10px;overflow:auto;max-height:280px;font-size:12px;margin:8px 0 0}
+#jsonIn{font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;min-height:200px;resize:vertical}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--acc);color:var(--accInk);padding:9px 16px;border-radius:99px;opacity:0;transition:.25s;pointer-events:none}
 .toast.on{opacity:1}
 </style>
@@ -87,10 +68,11 @@ pre{background:var(--soft);padding:12px;border-radius:10px;overflow:auto;max-hei
 </div>
 
 <div class="sticky">
-  <div class="paper" id="paper"></div>
-  <details style="margin-top:12px"><summary>Data (what gets saved to your DB)</summary><div class="body">
-    <div class="bar" style="margin-top:0"><button class="pri" id="copy">Copy JSON</button><button id="reset">New blank invoice</button></div>
-    <pre id="json"></pre></div></details>
+  <details open style="margin-top:12px"><summary>Paste JSON to fill the form</summary><div class="body">
+    <p class="hint">Paste your JSON, tap Fill form, done. Messy JSON is cleaned up for you (code fences, extra text, trailing commas).</p>
+    <textarea id="jsonIn" spellcheck="false" placeholder='{"number":"INV-002","bill_to":{"name":"Client"},"items":[{"description":"Design","qty":2,"price":150}]}'></textarea>
+    <div class="bar"><button class="pri" id="fill">Fill form</button><button id="format">Format</button><button id="copy">Copy current JSON</button><button id="reset">New blank invoice</button></div>
+  </div></details>
 </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -143,6 +125,43 @@ function formatInvoice(s){
   };
 }
 const money = (c,cur) => { try{return new Intl.NumberFormat(undefined,{style:"currency",currency:cur||"USD"}).format(c/100)}catch(e){return (c/100).toFixed(2)} };
+
+// ---------- Paste JSON: clean it up, then fill the form ----------
+function parseLoose(txt){
+  txt=String(txt||"").trim().replace(/^```(?:json)?/i,"").replace(/```$/,"").trim();
+  const a=txt.indexOf("{"), b=txt.lastIndexOf("}");
+  if(a<0||b<a) throw new Error("No JSON found");
+  txt=txt.slice(a,b+1).replace(/,\s*([}\]])/g,"$1");
+  return JSON.parse(txt);
+}
+function fromJSON(j){
+  // The editor's own export has "subtotal" / "bill_to" and amounts in cents. Anything else is plain amounts.
+  const cents = j.subtotal!==undefined || j.bill_to!==undefined;
+  const c = v => cents ? (+v||0)/100 : (+v||0);
+  const I=j.issuer||j.company||j.from||{}, B=j.bill_to||j.to||j.client||j.bill||{}, sig=j.signature||{};
+  const phones=Array.isArray(I.phones)?I.phones.join(", "):(I.phones||I.phone||"");
+  const next=blank();
+  next.issuer={name:I.name||"",address:I.address||"",phones,website:I.website||"",email:I.email||"",logo:I.logo||j.logo||S.issuer.logo||""};
+  next.bill={name:B.name||"",role:B.role||"",address:B.address||"",phone:B.phone||"",email:B.email||""};
+  next.meta={
+    number:j.number||j.no||j.invoice_number||S.meta.number,
+    date:j.date||S.meta.date,
+    currency:j.currency||S.meta.currency||"USD",
+    tax:j.tax_percent!==undefined?j.tax_percent:(cents?0:(j.tax||0)),
+    discount:c(j.discount)
+  };
+  if(Array.isArray(j.items)&&j.items.length){
+    next.items=j.items.map(it=>({id:uid(),description:it.description||it.desc||it.name||"",note:it.note||"",qty:it.qty??it.quantity??1,price:c(it.price??it.unit_price)}));
+  }
+  const pm=j.payment_methods||j.paymentMethods||j.payments||[];
+  next.pms=pm.map(p=>({
+    title:p.title||p.name||"",
+    fields:Array.isArray(p.fields)?p.fields.map(f=>({label:f.label||"",value:f.value||""}))
+      :Object.entries(p.fields||{}).map(([label,value])=>({label,value:String(value)}))
+  }));
+  next.end={terms:j.terms||"",sigName:sig.name||j.signer||"",sigRole:sig.role||j.signerRole||"",sigImg:sig.image||j.signatureUrl||S.end.sigImg||""};
+  return next;
+}
 
 // ---------- Simple field builders ----------
 function fields(host, obj, defs, onChange){
@@ -259,26 +278,9 @@ function buildPresets(){
 
 // ---------- Preview ----------
 function render(){
-  const d=formatInvoice(S), m=c=>money(c,d.currency), I=d.issuer, B=d.bill_to;
+  const d=formatInvoice(S);
   document.querySelectorAll(".tt").forEach((el,i)=>{if(el===document.activeElement)return;const t=d.items[i]?d.items[i].total:0;el.value=t?(t/100).toFixed(2):""});
   document.querySelectorAll(".cur").forEach(el=>{el.textContent=d.currency?"("+d.currency+")":""});
-  $("paper").innerHTML=`
-  <div class="top"><div>${I.logo?`<img src="${I.logo}" alt="" style="max-height:52px;max-width:160px;display:block;margin-bottom:8px">`:""}<b>${esc(I.name)}</b><br>${esc(I.address).replace(/\n/g,"<br>")}</div><div>${I.phones.map(esc).join("<br>")}<br>${esc(I.email)}</div></div>
-  <h2>INVOICE</h2>
-  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
-   <div><div class="lbl">TO</div><b>${esc(B.name)}</b><small>${esc(B.role)}</small>
-    <div>${esc(B.address)}</div><small>${esc(B.phone)}</small><small>${esc(B.email)}</small></div>
-   <div class="r" style="text-align:right"><div class="lbl">No. ${esc(d.number)}</div><small>${esc(d.date)}</small></div></div>
-  <table><tr><th>ITEM DESCRIPTION</th><th class="r">QTY</th><th class="r">TOTAL</th></tr>
-  ${d.items.map(i=>`<tr><td>${esc(i.description)}<small>${esc(i.note)}</small></td><td class="r">${i.qty}</td><td class="r">${m(i.total)}</td></tr>`).join("")}</table>
-  <div class="sum"><div><span>Subtotal</span><span>${m(d.subtotal)}</span></div>
-  ${d.tax?`<div><span>Tax (${d.tax_percent}%)</span><span>${m(d.tax)}</span></div>`:""}
-  ${d.discount?`<div><span>Discount</span><span>-${m(d.discount)}</span></div>`:""}
-  <div class="t"><span>TOTAL</span><span>${m(d.total)}</span></div></div>
-  ${d.payment_methods.map(p=>`<div class="pmb"><div class="lbl" style="margin-top:0">${esc(p.title).toUpperCase()}</div>${p.fields.map(f=>`<div>${esc(f.label)}${f.label&&f.value?": ":""}${esc(f.value)}</div>`).join("")}</div>`).join("")}
-  ${d.signature.name||d.signature.image?`<div class="sig">${d.signature.image?`<img src="${d.signature.image}" alt="" style="max-height:88px;max-width:240px;display:block;margin-left:auto">`:""}${esc(d.signature.name)}<small><br>${esc(d.signature.role)}</small></div>`:""}
-  ${d.terms?`<div class="terms"><b>Terms &amp; Conditions</b><br>${esc(d.terms)}</div>`:""}`;
-  $("json").textContent=JSON.stringify(d,null,2);
 }
 function toParent(){
   S.items.forEach(it=>{ if(!it.id) it.id=uid() });
@@ -338,10 +340,21 @@ function rebuild(){buildStatic();buildItems();buildPMs();render()}
 
 // ---------- Buttons ----------
 $("addItem").onclick=()=>{S.items.push({id:uid(),description:"",note:"",qty:1,price:0});buildItems();update()};
-$("copy").onclick=async()=>{try{await navigator.clipboard.writeText($("json").textContent);toast("Copied")}catch(e){toast("Select the text and copy")}};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(formatInvoice(S),null,2));toast("Copied")}catch(e){toast("Could not copy")}};
 $("reset").onclick=()=>{const keep=S.issuer,keepPm=S.pms,keepEnd=S.end;S=blank();S.issuer=keep;S.pms=keepPm;S.end=keepEnd;rebuild();update();toast("New invoice (company kept)")};
 $("saveProfile").onclick=()=>{store.set("inv_profile",{issuer:S.issuer,pms:S.pms,end:S.end});toast("Company profile saved")};
 $("loadProfile").onclick=()=>{const p=store.get("inv_profile");if(!p)return toast("No saved profile yet");Object.assign(S,p);rebuild();update();toast("Profile loaded")};
+$("fill").onclick=()=>{
+  try{ const j=parseLoose($("jsonIn").value); S=fromJSON(j); rebuild(); update(); $("jsonIn").value=JSON.stringify(j,null,2); toast("Form filled") }
+  catch(e){ toast("That JSON could not be read") }
+};
+$("format").onclick=()=>{
+  try{ $("jsonIn").value=JSON.stringify(parseLoose($("jsonIn").value),null,2); toast("Formatted") }
+  catch(e){ toast("That JSON could not be read") }
+};
+$("jsonIn").addEventListener("paste",()=>{
+  setTimeout(()=>{ try{ $("jsonIn").value=JSON.stringify(parseLoose($("jsonIn").value),null,2) }catch(e){} },0);
+});
 
 // ---------- Init ----------
 if(!EMBED){ const draft=store.get("inv_draft"); if(draft) S=Object.assign(blank(),draft); }

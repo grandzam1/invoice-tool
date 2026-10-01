@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import {
   ChevronLeft,
   Save,
@@ -25,6 +26,8 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { InvoiceDocument, InvoiceContent } from './types';
+import { editPath, readEditInvoiceId } from './routes/editPath';
+import { InvoiceDraftProvider, useInvoiceDraft } from './state/invoiceDraft';
 import { EditorMode, readEditorMode, writeEditorMode } from './config/editorMode';
 import {
   getInvoices,
@@ -52,42 +55,18 @@ import { Editor2Host } from './components/Editor2Host';
 import { openPrintRoute, rememberPrintPayload } from './print/openPrint';
 import { EditorSettings } from './components/EditorSettings';
 import { Dashboard } from './components/Dashboard';
-import { authHeaders } from './firebase';
+import { app as firebaseApp, authHeaders } from './firebase';
 import { cn } from './lib/utils';
 
 const DESIGN_WIDTH = 800;
 const DESIGN_MIN_HEIGHT = 1130;
 
-type HistorySnapshot = {
-  content: InvoiceContent;
-  editor2?: InvoiceDocument['editor2'];
-  number: string;
-  client_name: string;
-  date: string;
-};
-
-function snapshotOf(invoice: InvoiceDocument): HistorySnapshot {
-  return {
-    content: invoice.content,
-    editor2: invoice.editor2,
-    number: invoice.number,
-    client_name: invoice.client_name,
-    date: invoice.date,
-  };
-}
-
-function withSnapshot(invoice: InvoiceDocument, snapshot: HistorySnapshot): InvoiceDocument {
-  return {
-    ...invoice,
-    content: snapshot.content,
-    editor2: snapshot.editor2,
-    number: snapshot.number,
-    client_name: snapshot.client_name,
-    date: snapshot.date,
-  };
-}
-
-export default function App() {
+function App() {
+  const draft = useInvoiceDraft();
+  const currentInvoice = draft.active;
+  const undoStack = draft.undoStack;
+  const redoStack = draft.redoStack;
+  const saveStatus = draft.saveStatus;
   // Navigation: 'dashboard' | 'editor'
   const [currentView, setCurrentView] = useState<'dashboard' | 'editor' | 'upload'>('dashboard');
   const [documentTypes, setDocumentTypes] = useState<StoredDocumentType[]>([]);
@@ -96,8 +75,10 @@ export default function App() {
 
   // Invoices state
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([]);
-  const [currentInvoice, setCurrentInvoice] = useState<InvoiceDocument | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pathInvoiceId, setPathInvoiceId] = useState<string | null>(() => readEditInvoiceId());
+  const [bootReady, setBootReady] = useState(() => readEditInvoiceId() == null);
+  const [authReady, setAuthReady] = useState(false);
 
   // Editor Sidebar toggle
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -111,13 +92,7 @@ export default function App() {
   const [editorMode, setEditorMode] = useState<EditorMode>(() => readEditorMode());
   const previewRef = useRef<TemplatePreviewHandle>(null);
 
-  // Save status
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Undo / Redo history for current invoice content
-  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
-  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
 
   // Viewport scaling & dynamic height
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
@@ -174,6 +149,71 @@ export default function App() {
     // Phase 2.3: Non-blocking connection self-test against Firestore and Cloud Storage
     runConnectionSelfTest();
   }, [loadInvoices, loadDocumentTypes]);
+
+  useEffect(() => onAuthStateChanged(getAuth(firebaseApp), () => setAuthReady(true)), []);
+
+  const goToInvoice = (invoice: InvoiceDocument) => {
+    draft.open(invoice);
+    if (readEditInvoiceId() !== invoice.id) {
+      window.history.pushState({ invoiceId: invoice.id }, '', editPath(invoice.id));
+    }
+    setPathInvoiceId(invoice.id);
+    setBootReady(true);
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+    setCurrentView('editor');
+  };
+
+  const goHome = () => {
+    if (readEditInvoiceId()) window.history.pushState({}, '', '/');
+    setPathInvoiceId(null);
+    setBootReady(true);
+    setCurrentView('dashboard');
+  };
+
+  useEffect(() => {
+    if (!authReady || loading) return;
+    if (!pathInvoiceId) {
+      setBootReady(true);
+      return;
+    }
+    const found = invoices.find((inv) => inv.id === pathInvoiceId);
+    if (!found) {
+      window.history.replaceState({}, '', '/');
+      setPathInvoiceId(null);
+      setCurrentView('dashboard');
+      setBootReady(true);
+      return;
+    }
+    draft.open(found);
+    setCurrentView('editor');
+    setBootReady(true);
+  }, [authReady, loading, pathInvoiceId, invoices, draft.open]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const id = readEditInvoiceId();
+      setPathInvoiceId(id);
+      if (!id) {
+        setCurrentView('dashboard');
+        setBootReady(true);
+        return;
+      }
+      if (!authReady || loading) return;
+      const found = invoices.find((inv) => inv.id === id);
+      if (!found) {
+        window.history.replaceState({}, '', '/');
+        setPathInvoiceId(null);
+        setCurrentView('dashboard');
+        setBootReady(true);
+        return;
+      }
+      draft.open(found);
+      setCurrentView('editor');
+      setBootReady(true);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [authReady, loading, invoices, draft.open]);
 
   useEffect(() => {
     const type = documentTypes.find((item) => item.id === selectedTypeId);
@@ -262,19 +302,9 @@ export default function App() {
     };
   }, [currentView, calculateScale, isSidebarOpen, editorMode]);
 
-  // Switch to Invoice Editor and reset undo/redo stacks
   const handleOpenInvoice = (invoiceId: string) => {
     const found = invoices.find((inv) => inv.id === invoiceId);
-    if (found) {
-      setCurrentInvoice(JSON.parse(JSON.stringify(found)));
-      setUndoStack([]); // Reset history when switching
-      setRedoStack([]);
-      setSaveStatus('saved');
-      if (window.innerWidth < 768) {
-        setIsSidebarOpen(false);
-      }
-      setCurrentView('editor');
-    }
+    if (found) goToInvoice(found);
   };
 
   // Create new invoice in Firestore
@@ -284,14 +314,7 @@ export default function App() {
       const nextNum = `INV-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, '0')}`;
       const created = await createInvoice({ number: nextNum });
       setInvoices((prev) => [created, ...prev]);
-      setCurrentInvoice(created);
-      setUndoStack([]);
-      setRedoStack([]);
-      setSaveStatus('saved');
-      if (window.innerWidth < 768) {
-        setIsSidebarOpen(false);
-      }
-      setCurrentView('editor');
+      goToInvoice(created);
     } catch (err: any) {
       console.error('Error creating invoice:', err);
       setErrorMessage('Failed to create invoice in Firestore');
@@ -306,14 +329,7 @@ export default function App() {
     try {
       const duplicated = await duplicateInvoice(sourceInvoice);
       setInvoices((prev) => [duplicated, ...prev]);
-      setCurrentInvoice(duplicated);
-      setUndoStack([]);
-      setRedoStack([]);
-      setSaveStatus('saved');
-      if (window.innerWidth < 768) {
-        setIsSidebarOpen(false);
-      }
-      setCurrentView('editor');
+      goToInvoice(duplicated);
     } catch (err: any) {
       console.error('Error duplicating invoice:', err);
       setErrorMessage('Failed to duplicate invoice');
@@ -326,18 +342,13 @@ export default function App() {
   const handleDeleteInvoice = async (invoiceId: string) => {
     try {
       await deleteInvoice(invoiceId);
+      const wasCurrent = currentInvoice?.id === invoiceId;
       setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
-      if (currentInvoice?.id === invoiceId) {
+      draft.forget(invoiceId);
+      if (wasCurrent) {
         const remaining = invoices.filter((inv) => inv.id !== invoiceId);
-        if (remaining.length > 0) {
-          setCurrentInvoice(remaining[0]);
-          setUndoStack([]);
-          setRedoStack([]);
-          setSaveStatus('saved');
-        } else {
-          setCurrentInvoice(null);
-          setCurrentView('dashboard');
-        }
+        if (remaining.length > 0) goToInvoice(remaining[0]);
+        else goHome();
       }
       setDeleteTargetId(null);
     } catch (err: any) {
@@ -346,65 +357,45 @@ export default function App() {
     }
   };
 
-  // Save current invoice to Firestore
   const handleSaveCurrentInvoice = async () => {
     if (!currentInvoice) return;
-    setSaveStatus('saving');
+    const invoice = currentInvoice;
+    draft.markSaving(invoice.id);
     try {
-      await saveInvoice(currentInvoice);
+      await saveInvoice(invoice);
       setInvoices((prev) =>
-        prev.map((inv) => (inv.id === currentInvoice.id ? currentInvoice : inv))
+        prev.map((inv) => (inv.id === invoice.id ? invoice : inv))
       );
-      setSaveStatus('saved');
+      draft.markSaved(invoice);
     } catch (err: any) {
       console.error('Error saving invoice:', err);
-      setSaveStatus('error');
+      draft.markError(invoice.id);
       setErrorMessage('Failed to save to Firestore.');
     }
   };
 
-  // Content change handler with Undo / Redo tracking
+  const leaveEditor = () => {
+    if (saveStatus === 'dirty') void handleSaveCurrentInvoice();
+    goHome();
+  };
+
   const handleContentChange = (newContent: InvoiceContent) => {
     if (!currentInvoice) return;
-
-    // Push previous document state so editor2 tax and items survive undo
-    setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
-    setRedoStack([]); // Clear redo stack on new edit
-
-    setCurrentInvoice((prev) => (prev ? { ...prev, content: newContent } : null));
-    setSaveStatus('dirty');
+    draft.edit({ ...currentInvoice, content: newContent });
   };
 
-  // Number change handler
   const handleNumberChange = (newNumber: string) => {
     if (!currentInvoice) return;
-    setCurrentInvoice((prev) => (prev ? { ...prev, number: newNumber } : null));
-    setSaveStatus('dirty');
+    draft.replace({ ...currentInvoice, number: newNumber });
   };
 
-  // Undo action
   const handleUndo = useCallback(() => {
-    if (undoStack.length === 0 || !currentInvoice) return;
-    const previous = undoStack[undoStack.length - 1];
-    const newUndoStack = undoStack.slice(0, -1);
+    draft.undo();
+  }, [draft.undo]);
 
-    setRedoStack((prev) => [...prev, snapshotOf(currentInvoice)]);
-    setUndoStack(newUndoStack);
-    setCurrentInvoice((prev) => (prev ? withSnapshot(prev, previous) : null));
-    setSaveStatus('dirty');
-  }, [undoStack, currentInvoice]);
-
-  // Redo action
   const handleRedo = useCallback(() => {
-    if (redoStack.length === 0 || !currentInvoice) return;
-    const next = redoStack[redoStack.length - 1];
-    const newRedoStack = redoStack.slice(0, -1);
-
-    setUndoStack((prev) => [...prev, snapshotOf(currentInvoice)]);
-    setRedoStack(newRedoStack);
-    setCurrentInvoice((prev) => (prev ? withSnapshot(prev, next) : null));
-    setSaveStatus('dirty');
-  }, [redoStack, currentInvoice]);
+    draft.redo();
+  }, [draft.redo]);
 
   // Keyboard shortcuts (Undo: Cmd/Ctrl+Z, Redo: Cmd/Ctrl+Shift+Z or Ctrl+Y, Save: Cmd/Ctrl+S)
   useEffect(() => {
@@ -443,24 +434,14 @@ export default function App() {
     await loadDocumentTypes();
     setSelectedTypeId(id);
     setTemplatePreviewOpen(true);
-    if (!currentInvoice && invoices[0]) setCurrentInvoice(invoices[0]);
-    setCurrentView('editor');
+    if (!currentInvoice && invoices[0]) goToInvoice(invoices[0]);
+    else if (currentInvoice) goToInvoice(currentInvoice);
+    else setCurrentView('editor');
   };
 
   const handleDocumentChange = (next: InvoiceDocument) => {
     if (!currentInvoice) return;
-    setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
-    setRedoStack([]);
-    setCurrentInvoice(next);
-    setSaveStatus('dirty');
-  };
-
-  const handleEditor2Change = (next: InvoiceDocument) => {
-    if (!currentInvoice) return;
-    setUndoStack((prev) => [...prev.slice(-40), snapshotOf(currentInvoice)]);
-    setRedoStack([]);
-    setCurrentInvoice(next);
-    setSaveStatus('dirty');
+    draft.edit(next);
   };
 
   const handleEditorModeChange = (next: EditorMode) => {
@@ -488,6 +469,17 @@ export default function App() {
       (inv.client_name || '').toLowerCase().includes(term)
     );
   });
+
+  if (pathInvoiceId && !bootReady) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#09090b] text-zinc-500">
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="w-5 h-5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs">Fetching invoices from Firestore...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn('w-screen h-screen flex flex-col bg-[#09090b] overflow-hidden text-zinc-100 select-none', editorMode === 'editor2' && 'editor-mode-editor2')}>
@@ -557,12 +549,7 @@ export default function App() {
 
               {/* Back button (< Invoices) - always visible */}
               <button
-                onClick={() => {
-                  if (saveStatus === 'dirty') {
-                    handleSaveCurrentInvoice();
-                  }
-                  setCurrentView('dashboard');
-                }}
+                onClick={leaveEditor}
                 className="h-8 px-2 sm:px-2.5 inline-flex items-center gap-1 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-md transition-colors cursor-pointer shrink-0"
                 title="Back to all invoices"
               >
@@ -1086,23 +1073,15 @@ export default function App() {
             </div>
             {editorMode === 'editor2' && !customType && (
               <Editor2Host
-                invoice={currentInvoice}
                 invoices={invoices}
-                onChange={handleEditor2Change}
                 onDuplicate={() => handleDuplicateInvoice(currentInvoice)}
                 onDelete={() => handleDeleteInvoice(currentInvoice.id)}
-                onBack={() => {
-                  if (saveStatus === 'dirty') handleSaveCurrentInvoice();
-                  setCurrentView('dashboard');
-                }}
+                onBack={leaveEditor}
                 onSave={handleSaveCurrentInvoice}
-                onUndo={handleUndo}
-                onRedo={handleRedo}
               />
             )}
             <TemplatePreview
               ref={previewRef}
-              invoice={currentInvoice}
               open={templatePreviewOpen}
               onClose={() => setTemplatePreviewOpen(false)}
               documentTypes={documentTypes}
@@ -1142,5 +1121,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AppRoot() {
+  return (
+    <InvoiceDraftProvider>
+      <App />
+    </InvoiceDraftProvider>
   );
 }

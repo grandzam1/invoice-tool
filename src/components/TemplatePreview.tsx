@@ -1,8 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { InvoiceDocument } from '../types';
 import { fillDocumentTemplate, fillFromValues } from '../templates/fillDocument';
 import { DocumentItemRow, StoredDocumentType } from '../templates/documentFields';
 import { mapInvoiceToTemplate, TemplateInvoiceView } from '../templates/mapInvoiceToTemplate';
+import { documentPath } from '../print/openPrint';
+import { useInvoiceDraft } from '../state/invoiceDraft';
 import invoice1Html from '../templates/invoice1.html?raw';
 import invoice2Html from '../templates/invoice2.html?raw';
 
@@ -11,12 +12,36 @@ const BUILTIN_TEMPLATES = [
   { id: 'builtin:invoice2', label: 'Invoice 2', srcDoc: invoice2Html },
 ] as const;
 
+const DOCUMENT_SHELL = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script id="preview-tailwind" src="https://cdn.tailwindcss.com"></script>
+<script>
+window.addEventListener('message', function (event) {
+  if (event.source !== window.parent) return;
+  var data = event.data;
+  if (!data || data.type !== 'preview:html' || typeof data.html !== 'string') return;
+  var parsed = new DOMParser().parseFromString(data.html, 'text/html');
+  document.documentElement.className = parsed.documentElement.className || '';
+  Array.prototype.forEach.call(document.head.querySelectorAll('style,link,meta'), function (node) { node.remove(); });
+  Array.prototype.forEach.call(parsed.head.children, function (node) {
+    if (node.tagName === 'SCRIPT') return;
+    document.head.appendChild(document.importNode(node, true));
+  });
+  document.body.replaceWith(document.importNode(parsed.body, true));
+  window.parent.postMessage({ type: 'preview:applied' }, '*');
+});
+</script>
+</head>
+<body></body>
+</html>`;
+
 type TemplateFrameWindow = Window & {
   fillInvoice?: (view: TemplateInvoiceView) => void;
 };
 
 interface TemplatePreviewProps {
-  invoice: InvoiceDocument;
   open: boolean;
   onClose: () => void;
   documentTypes: StoredDocumentType[];
@@ -32,7 +57,8 @@ export interface TemplatePreviewHandle {
 }
 
 export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreviewProps>(
-  function TemplatePreview({ invoice, open, onClose, documentTypes, selectedTypeId, onSelectType, draft }, ref) {
+  function TemplatePreview({ open, onClose, documentTypes, selectedTypeId, onSelectType, draft }, ref) {
+  const { active: invoice } = useInvoiceDraft();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [theme, setTheme] = useState('classic');
   const documentType = documentTypes.find((item) => item.id === selectedTypeId) ?? null;
@@ -41,14 +67,16 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
   const themes = documentType?.themes?.length ? documentType.themes : ['classic'];
 
   const filledDocument = useMemo(() => {
-    if (!documentType) return '';
+    if (!documentType || !invoice) return '';
     if (documentType.id === 'invoice1') return fillDocumentTemplate(documentType.html, invoice, { embed: true });
     const values = draft?.values || {};
     const items = (draft?.items || []).map((item) => item.values);
     return fillFromValues(documentType.html, values, items, { embed: true });
   }, [documentType, invoice, draft]);
 
-  const srcDoc = isDocument ? filledDocument : builtin?.srcDoc || '';
+  const srcDoc = isDocument ? DOCUMENT_SHELL : builtin?.srcDoc || '';
+  const filledRef = useRef(filledDocument);
+  filledRef.current = filledDocument;
 
   const fitSheet = () => {
     const frame = frameRef.current;
@@ -89,12 +117,19 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
     sheet?.setAttribute('data-theme', name);
   };
 
+  const postDocument = () => {
+    const frame = frameRef.current?.contentWindow;
+    const html = filledRef.current;
+    if (!frame || !html) return;
+    frame.postMessage({ type: 'preview:html', html }, '*');
+  };
+
   const paint = () => {
     if (isDocument) {
-      applyTheme(theme);
-      fitSheet();
+      postDocument();
       return;
     }
+    if (!invoice) return;
     const frameWindow = frameRef.current?.contentWindow as TemplateFrameWindow | null;
     if (frameWindow?.fillInvoice) {
       frameWindow.fillInvoice(mapInvoiceToTemplate(invoice));
@@ -115,35 +150,8 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
     },
   }));
 
-  const openInNewTab = () => {
-    const popup = window.open('', '_blank');
-    if (!popup) return;
-    if (isDocument && documentType) {
-      const html = documentType.id === 'invoice1'
-        ? fillDocumentTemplate(documentType.html, invoice, { embed: false })
-        : fillFromValues(documentType.html, draft?.values || {}, (draft?.items || []).map((item) => item.values), { embed: false });
-      popup.document.open();
-      popup.document.write(html);
-      popup.document.close();
-      return;
-    }
-    if (!builtin) return;
-    const view = mapInvoiceToTemplate(invoice);
-    popup.document.open();
-    popup.document.write(builtin.srcDoc);
-    popup.document.close();
-    const apply = () => {
-      const target = popup as TemplateFrameWindow;
-      if (typeof target.fillInvoice !== 'function') return false;
-      target.fillInvoice(view);
-      return true;
-    };
-    if (apply()) return;
-    const timer = window.setInterval(() => {
-      if (popup.closed || apply()) window.clearInterval(timer);
-    }, 50);
-    window.setTimeout(() => window.clearInterval(timer), 4000);
-  };
+  const typeId = selectedTypeId.startsWith('builtin:') ? selectedTypeId.slice('builtin:'.length) : selectedTypeId;
+  const documentHref = invoice ? documentPath(invoice.id, typeId, theme) : '';
 
   useEffect(() => {
     setTheme(themes[0] || 'classic');
@@ -151,14 +159,29 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
 
   useEffect(() => {
     paint();
-  }, [invoice, selectedTypeId, srcDoc, open, theme]);
+  }, [invoice, selectedTypeId, open, theme, filledDocument, isDocument]);
+
+  useEffect(() => {
+    if (!isDocument) return;
+    applyTheme(theme);
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+      if (event.data?.type !== 'preview:applied') return;
+      applyTheme(theme);
+      fitSheet();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isDocument, theme]);
 
   useEffect(() => {
     if (!isDocument) return;
     const onResize = () => fitSheet();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [isDocument, srcDoc]);
+  }, [isDocument]);
+
+  if (!invoice) return null;
 
   return (
     <aside
@@ -186,13 +209,13 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={openInNewTab}
-          className="h-8 px-2.5 text-xs font-medium rounded-md border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 shrink-0 cursor-pointer"
+        <a
+          href={documentHref}
+          target="_blank"
+          className="h-8 px-2.5 text-xs font-medium rounded-md border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 shrink-0 cursor-pointer inline-flex items-center no-underline"
         >
           Open in tab
-        </button>
+        </a>
         <button
           type="button"
           onClick={onClose}
@@ -221,15 +244,16 @@ export const TemplatePreview = forwardRef<TemplatePreviewHandle, TemplatePreview
       <div className="template-preview-stage">
         <div className="template-preview-frame">
           <iframe
-            key={selectedTypeId}
+            key={isDocument ? 'stored-document' : selectedTypeId}
             ref={frameRef}
             title="Invoice template preview"
             srcDoc={srcDoc}
             onLoad={() => {
-              paint();
               const frameWindow = frameRef.current?.contentWindow;
               frameWindow?.addEventListener('beforeprint', resetSheet);
               frameWindow?.addEventListener('afterprint', fitSheet);
+              if (isDocument) postDocument();
+              else paint();
             }}
             className="template-preview-iframe"
           />

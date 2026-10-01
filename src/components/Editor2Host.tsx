@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { InvoiceDocument } from '../types';
 import editor2Html from '../editors/editor-v2.html?raw';
 import {
@@ -9,58 +9,53 @@ import {
 } from '../editors/mapEditor2';
 import { uploadInvoiceImage } from '../services/invoiceService';
 import { blobToDataUrl, prepareSignature } from '../services/signatureBackground';
+import { useInvoiceDraft } from '../state/invoiceDraft';
 
 interface Editor2HostProps {
-  invoice: InvoiceDocument;
   invoices: InvoiceDocument[];
-  onChange: (next: InvoiceDocument) => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onBack: () => void;
   onSave: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
 }
 
 export function Editor2Host({
-  invoice,
   invoices,
-  onChange,
   onDuplicate,
   onDelete,
   onBack,
   onSave,
-  onUndo,
-  onRedo,
 }: Editor2HostProps) {
+  const { active: invoice, edit, undo, redo } = useInvoiceDraft();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const invoiceRef = useRef(invoice);
   const invoicesRef = useRef(invoices);
   const echoRef = useRef<string | null>(null);
-  const onChangeRef = useRef(onChange);
+  const onChangeRef = useRef(edit);
   const onDuplicateRef = useRef(onDuplicate);
   const onDeleteRef = useRef(onDelete);
   const onBackRef = useRef(onBack);
   const onSaveRef = useRef(onSave);
-  const onUndoRef = useRef(onUndo);
-  const onRedoRef = useRef(onRedo);
+  const onUndoRef = useRef(undo);
+  const onRedoRef = useRef(redo);
   const inflightImages = useRef<Set<string>>(new Set());
   const pendingOriginalUrl = useRef('');
 
   invoiceRef.current = invoice;
   invoicesRef.current = invoices;
-  onChangeRef.current = onChange;
+  onChangeRef.current = edit;
   onDuplicateRef.current = onDuplicate;
   onDeleteRef.current = onDelete;
   onBackRef.current = onBack;
   onSaveRef.current = onSave;
-  onUndoRef.current = onUndo;
-  onRedoRef.current = onRedo;
+  onUndoRef.current = undo;
+  onRedoRef.current = redo;
 
   const postHydrate = () => {
     const frame = frameRef.current?.contentWindow;
-    if (!frame) return;
-    const form = toEditor2Invoice(invoiceRef.current);
+    const current = invoiceRef.current;
+    if (!frame || !current) return;
+    const form = toEditor2Invoice(current);
     echoRef.current = JSON.stringify(form);
     frame.postMessage(
       {
@@ -95,7 +90,7 @@ export function Editor2Host({
 
     const patchStoredImage = (invoiceId: string, url: string, remote: string, fields: ImageField[]) => {
       const latest = invoiceRef.current;
-      if (latest.id !== invoiceId || !remote || remote === url) return;
+      if (!latest || latest.id !== invoiceId || !remote || remote === url) return;
       const form = toEditor2Invoice(latest);
       let changed = false;
       fields.forEach((field) => {
@@ -131,32 +126,36 @@ export function Editor2Host({
     };
 
     const handleSignature = async (dataUrl: string) => {
-      const invoiceId = invoiceRef.current.id;
+      const openInvoice = invoiceRef.current;
+      if (!openInvoice) return;
+      const invoiceId = openInvoice.id;
       signatureJobs += 1;
       pendingOriginalUrl.current = dataUrl;
       let cleanedUrl = dataUrl;
       try {
         const prepared = await prepareSignature(dataUrl);
-        if (invoiceRef.current.id === invoiceId) {
+        const during = invoiceRef.current;
+        if (during && during.id === invoiceId) {
           cleanedUrl = prepared.skipped ? dataUrl : await blobToDataUrl(prepared.cleaned);
         }
       } catch (error) {
         console.warn('Signature background removal failed, keeping the original:', error);
         cleanedUrl = dataUrl;
       }
-      if (invoiceRef.current.id !== invoiceId) {
+      const after = invoiceRef.current;
+      if (!after || after.id !== invoiceId) {
         signatureJobs = Math.max(0, signatureJobs - 1);
         pendingOriginalUrl.current = '';
         return;
       }
-      const form = toEditor2Invoice(invoiceRef.current);
+      const form = toEditor2Invoice(after);
       form.signatureOrigUrl = dataUrl;
       form.signatureUrl = cleanedUrl;
-      publish(applyEditor2Invoice(invoiceRef.current, form));
+      publish(applyEditor2Invoice(after, form));
       frameRef.current?.contentWindow?.postMessage(
         {
           type: 'editor2:hydrate',
-          invoice: toEditor2Invoice(invoiceRef.current),
+          invoice: toEditor2Invoice(after),
           clients: clientsFromInvoices(invoicesRef.current),
         },
         '*'
@@ -175,8 +174,10 @@ export function Editor2Host({
         return;
       }
       if (data.type === 'editor2:update' && data.invoice) {
+        const latest = invoiceRef.current;
+        if (!latest) return;
         const form = data.invoice;
-        const current = toEditor2Invoice(invoiceRef.current);
+        const current = toEditor2Invoice(latest);
         if (signatureJobs > 0) {
           form.signatureUrl = current.signatureUrl;
           form.signatureOrigUrl = current.signatureOrigUrl;
@@ -187,7 +188,7 @@ export function Editor2Host({
           form.signatureUrl = keepStored(form.signatureUrl || '', current.signatureUrl);
           form.signatureOrigUrl = keepStored(form.signatureOrigUrl || '', current.signatureOrigUrl);
         }
-        const next = applyEditor2Invoice(invoiceRef.current, form);
+        const next = applyEditor2Invoice(latest, form);
         publish(next);
         queueImageUpload(next.id, 'logo', form.logoUrl || '');
         if (signatureJobs === 0) queueSignatureFiles(next.id, form.signatureOrigUrl || '', form.signatureUrl || '');
@@ -205,17 +206,26 @@ export function Editor2Host({
   }, []);
 
   useEffect(() => {
+    if (!invoice) return;
     const key = JSON.stringify(toEditor2Invoice(invoice));
     if (echoRef.current === key) return;
     postHydrate();
   }, [invoice, invoices]);
 
+  const bindFrame = useCallback((node: HTMLIFrameElement | null) => {
+    frameRef.current = node;
+    if (!node || node.dataset.srcdocSet === '1') return;
+    node.dataset.srcdocSet = '1';
+    node.srcdoc = editor2Html;
+  }, []);
+
+  if (!invoice) return null;
+
   return (
     <div className="editor2-host min-h-0 min-w-0 flex-1 bg-[#F6F6FC]">
       <iframe
-        ref={frameRef}
+        ref={bindFrame}
         title="Editor 2"
-        srcDoc={editor2Html}
         onLoad={() => {
           echoRef.current = null;
           postHydrate();

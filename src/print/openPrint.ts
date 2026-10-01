@@ -17,6 +17,13 @@ export function printPath(invoiceId: string, typeId: string, theme: string): str
   return `/invoices/${encodeURIComponent(invoiceId)}/print?${params.toString()}`;
 }
 
+export function documentPath(invoiceId: string, typeId: string, theme: string): string {
+  const params = new URLSearchParams();
+  params.set('type', typeId);
+  params.set('theme', theme || 'classic');
+  return `/invoice/${encodeURIComponent(invoiceId)}?${params.toString()}`;
+}
+
 export function rememberPrintPayload(payload: PrintPayload): void {
   try {
     sessionStorage.setItem(PRINT_PAYLOAD_KEY, JSON.stringify(payload));
