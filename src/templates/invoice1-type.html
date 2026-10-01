@@ -179,10 +179,12 @@
       <div class="accent-bg mb-2.5 mt-1 h-px w-[15mm]"></div>
       <p class="fb ink whitespace-pre-wrap text-[9px] leading-snug">{{terms}}</p>
     </div>
-    <div class="fb muted rule-t mr-[5mm] w-[40mm] pt-2 text-center text-[10.5px]">
+    <div class="fb muted mr-[5mm] w-[40mm] text-center text-[10.5px]">
       <img src="{{signature_url}}" alt="" class="mx-auto mb-1 h-16 max-w-full object-contain {{signature_hidden}}">
-      <p class="mb-1 text-[11px] font-semibold {{signer_hidden}}">{{signer_name}}</p>
-      Authorised Sign
+      <div class="rule-t pt-2">
+        <p class="mb-1 text-[11px] font-semibold {{signer_hidden}}">{{signer_name}}</p>
+        Authorised Sign
+      </div>
     </div>
   </div>
 
