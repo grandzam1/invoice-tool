@@ -26,7 +26,13 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { InvoiceDocument, InvoiceContent } from './types';
-import { editPath, readEditInvoiceId } from './routes/editPath';
+import { editPath } from './routes/editPath';
+import { HOME_PATH, UPLOAD_PATH, navigateTo, readAppLocation } from './routes/location';
+import { PORTAL_TABS, portalTabIcon } from './portal/tabs';
+import { deviceShellDataAttributes, useDeviceShell } from './adapters/react/lib/device';
+import { PortalMobileNav } from './adapters/react/components/portal-mobile-nav';
+import { PortalPageHeader } from './adapters/react/components/portal-page-header';
+import { PortalToaster } from './adapters/react/toasts/sonner';
 import { InvoiceDraftProvider, useInvoiceDraft } from './state/invoiceDraft';
 import { EditorMode, readEditorMode, writeEditorMode } from './config/editorMode';
 import {
@@ -68,7 +74,10 @@ function App() {
   const redoStack = draft.redoStack;
   const saveStatus = draft.saveStatus;
   // Navigation: 'dashboard' | 'editor'
-  const [currentView, setCurrentView] = useState<'dashboard' | 'editor' | 'upload'>('dashboard');
+  const initialLocation = readAppLocation();
+  const [currentView, setCurrentView] = useState(initialLocation.view);
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+  const device = useDeviceShell();
   const [documentTypes, setDocumentTypes] = useState<StoredDocumentType[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState('invoice1');
   const [typeDrafts, setTypeDrafts] = useState<Record<string, ReturnType<typeof blankDocumentDraft>>>({});
@@ -76,8 +85,8 @@ function App() {
   // Invoices state
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pathInvoiceId, setPathInvoiceId] = useState<string | null>(() => readEditInvoiceId());
-  const [bootReady, setBootReady] = useState(() => readEditInvoiceId() == null);
+  const [pathInvoiceId, setPathInvoiceId] = useState<string | null>(initialLocation.invoiceId);
+  const [bootReady, setBootReady] = useState(() => initialLocation.view !== 'editor');
   const [authReady, setAuthReady] = useState(false);
 
   // Editor Sidebar toggle
@@ -154,20 +163,13 @@ function App() {
 
   const goToInvoice = (invoice: InvoiceDocument) => {
     draft.open(invoice);
-    if (readEditInvoiceId() !== invoice.id) {
-      window.history.pushState({ invoiceId: invoice.id }, '', editPath(invoice.id));
-    }
-    setPathInvoiceId(invoice.id);
-    setBootReady(true);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
-    setCurrentView('editor');
+    setBootReady(true);
+    navigateTo(editPath(invoice.id));
   };
 
   const goHome = () => {
-    if (readEditInvoiceId()) window.history.pushState({}, '', '/');
-    setPathInvoiceId(null);
-    setBootReady(true);
-    setCurrentView('dashboard');
+    navigateTo(HOME_PATH);
   };
 
   useEffect(() => {
@@ -179,6 +181,7 @@ function App() {
     const found = invoices.find((inv) => inv.id === pathInvoiceId);
     if (!found) {
       window.history.replaceState({}, '', '/');
+      setPathname('/');
       setPathInvoiceId(null);
       setCurrentView('dashboard');
       setBootReady(true);
@@ -189,31 +192,9 @@ function App() {
     setBootReady(true);
   }, [authReady, loading, pathInvoiceId, invoices, draft.open]);
 
-  useEffect(() => {
-    const onPop = () => {
-      const id = readEditInvoiceId();
-      setPathInvoiceId(id);
-      if (!id) {
-        setCurrentView('dashboard');
-        setBootReady(true);
-        return;
-      }
-      if (!authReady || loading) return;
-      const found = invoices.find((inv) => inv.id === id);
-      if (!found) {
-        window.history.replaceState({}, '', '/');
-        setPathInvoiceId(null);
-        setCurrentView('dashboard');
-        setBootReady(true);
-        return;
-      }
-      draft.open(found);
-      setCurrentView('editor');
-      setBootReady(true);
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, [authReady, loading, invoices, draft.open]);
+  const viewRef = useRef(currentView);
+  const saveOnLeaveRef = useRef<() => void>(() => {});
+  viewRef.current = currentView;
 
   useEffect(() => {
     const type = documentTypes.find((item) => item.id === selectedTypeId);
@@ -374,10 +355,26 @@ function App() {
     }
   };
 
-  const leaveEditor = () => {
+  saveOnLeaveRef.current = () => {
     if (saveStatus === 'dirty') void handleSaveCurrentInvoice();
+  };
+
+  const leaveEditor = () => {
     goHome();
   };
+
+  useEffect(() => {
+    const onPop = () => {
+      const next = readAppLocation();
+      if (viewRef.current === 'editor' && next.view !== 'editor') saveOnLeaveRef.current();
+      setPathname(window.location.pathname);
+      setPathInvoiceId(next.invoiceId);
+      setCurrentView(next.view);
+      if (next.view !== 'editor') setBootReady(true);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const handleContentChange = (newContent: InvoiceContent) => {
     if (!currentInvoice) return;
@@ -470,9 +467,13 @@ function App() {
     );
   });
 
+  const showTabBar = PORTAL_TABS.length >= 2;
+  const shellProps = deviceShellDataAttributes(device);
+
   if (pathInvoiceId && !bootReady) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-[#09090b] text-zinc-500">
+      <div id="portal-shell" className="portal-theme flex h-dvh max-h-dvh w-full min-w-0 items-center justify-center overflow-hidden bg-[#09090b] text-zinc-500" {...shellProps}>
+        <PortalToaster appearance="dark" />
         <div className="flex flex-col items-center justify-center gap-3">
           <div className="w-5 h-5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
           <span className="text-xs">Fetching invoices from Firestore...</span>
@@ -482,7 +483,8 @@ function App() {
   }
 
   return (
-    <div className={cn('w-screen h-screen flex flex-col bg-[#09090b] overflow-hidden text-zinc-100 select-none', editorMode === 'editor2' && 'editor-mode-editor2')}>
+    <div id="portal-shell" className={cn('portal-theme flex h-dvh max-h-dvh w-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden overflow-x-clip bg-[#09090b] text-zinc-100 select-none', editorMode === 'editor2' && 'editor-mode-editor2')} {...shellProps}>
+      <PortalToaster appearance="dark" />
       {/* Toast Error Banner */}
       {errorMessage && (
         <div className="bg-red-950/90 border-b border-red-800 text-red-200 text-xs py-2 px-4 flex items-center justify-between z-50">
@@ -501,31 +503,40 @@ function App() {
 
       {/* DASHBOARD VIEW */}
       {currentView === 'dashboard' && (
+        <div className={cn('flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden overflow-x-clip', showTabBar && 'portal-shell-content--tab-bar')}>
         <Dashboard
           invoices={invoices}
           onOpenInvoice={handleOpenInvoice}
           onCreateInvoice={handleCreateNewInvoice}
-          onUploadDocumentType={() => setCurrentView('upload')}
+          onUploadDocumentType={() => navigateTo(UPLOAD_PATH)}
           onDuplicateInvoice={handleDuplicateInvoice}
           onDeleteInvoice={handleDeleteInvoice}
           loading={loading}
         />
+        </div>
       )}
 
       {currentView === 'upload' && (
+        <>
+        <PortalPageHeader title="Upload" back={{ href: HOME_PATH, label: 'Invoices' }} />
         <DocumentTypeUpload
-          onCancel={() => setCurrentView('dashboard')}
           onUploaded={(id) => {
             void handleTypeUploaded(id);
           }}
         />
+        </>
       )}
 
       {/* EDITOR VIEW (shadcn minimal design with collapsible sidebar) */}
       {currentView === 'editor' && currentInvoice && (
-        <div className="w-full h-full flex flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-hidden">
+          <PortalPageHeader
+            className="md:hidden"
+            title={currentInvoice.number || 'Invoice'}
+            back={{ href: HOME_PATH, label: 'Invoices' }}
+          />
           {/* Top Minimal Header (shadcn exact styling) */}
-          <header className="editor-toolbar h-13 border-b border-zinc-800 bg-[#09090b] px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 select-none">
+          <header className="editor-toolbar h-13 border-b border-zinc-800 bg-[#09090b] px-3 sm:px-4 flex items-center justify-between shrink-0 z-20 md:z-30 select-none">
             {/* Left Controls: Sidebar toggle, Dashboard link, Breadcrumbs */}
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
               {/* Sidebar toggle button (desktop only) */}
@@ -920,7 +931,7 @@ function App() {
           </header>
 
           {/* MAIN WORKSPACE: Collapsible Minimal List Sidebar + Invoice Scaler */}
-          <div className="flex-1 w-full flex overflow-hidden relative">
+          <div className="portal-editor-stage relative flex min-h-0 min-w-0 w-full flex-1 overflow-hidden">
             {/* COLLAPSIBLE MINIMAL LIST SIDEBAR (shadcn style) */}
             {isSidebarOpen && (
               <>
@@ -1007,6 +1018,7 @@ function App() {
             )}
 
             {formDocumentType && !customType && (
+              <div className={cn('h-full shrink-0', editorMode === 'editor2' && 'max-md:hidden')}>
               <DocumentTypeForm
                 name={formDocumentType.name}
                 fields={formDocumentType.fields}
@@ -1014,6 +1026,7 @@ function App() {
                 items={readDocumentItems(currentInvoice)}
                 onChange={(values, items) => handleDocumentChange(applyDocumentFields(currentInvoice, values, items))}
               />
+              </div>
             )}
             {customType && selectedDocumentType && customDraft && (
               <DocumentTypeForm
@@ -1119,6 +1132,21 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+      {showTabBar && (
+        <PortalMobileNav
+          items={PORTAL_TABS.map((tab) => {
+            const Icon = portalTabIcon(tab.icon);
+            const active = tab.url === '/' ? pathname === '/' : pathname === tab.url || pathname.startsWith(`${tab.url}/`);
+            return {
+              key: tab.key,
+              title: tab.title,
+              url: tab.url,
+              icon: <Icon className="size-4" aria-hidden />,
+              active,
+            };
+          })}
+        />
       )}
     </div>
   );

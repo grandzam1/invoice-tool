@@ -3,7 +3,6 @@ import { authHeaders } from '../firebase';
 import { DocumentField } from '../templates/documentFields';
 
 interface DocumentTypeUploadProps {
-  onCancel: () => void;
   onUploaded: (id: string) => void;
 }
 
@@ -17,7 +16,7 @@ function isField(value: unknown): value is DocumentField {
   return typeof field.key === 'string' && typeof field.label === 'string';
 }
 
-export function DocumentTypeUpload({ onCancel, onUploaded }: DocumentTypeUploadProps) {
+export function DocumentTypeUpload({ onUploaded }: DocumentTypeUploadProps) {
   const [manifestFile, setManifestFile] = useState<File | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +67,7 @@ export function DocumentTypeUpload({ onCancel, onUploaded }: DocumentTypeUploadP
   };
 
   return (
-    <div className="w-full h-full bg-[#09090b] text-zinc-100 flex items-start justify-center p-8">
+    <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden bg-[#09090b] text-zinc-100 flex items-start justify-center p-8">
       <form
         className="w-full max-w-md space-y-4"
         onSubmit={(event) => {
@@ -76,12 +75,6 @@ export function DocumentTypeUpload({ onCancel, onUploaded }: DocumentTypeUploadP
           void upload();
         }}
       >
-        <div className="flex items-center justify-between">
-          <h1 className="text-sm font-semibold">Upload document type</h1>
-          <button type="button" onClick={onCancel} className="text-xs text-zinc-400 hover:text-zinc-100 cursor-pointer">
-            Back
-          </button>
-        </div>
         <label className="block space-y-1">
           <span className="text-[11px] text-zinc-400">manifest.json</span>
           <input

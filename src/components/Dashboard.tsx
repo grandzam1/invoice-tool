@@ -101,7 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="w-full h-full bg-[#09090b] text-zinc-100 flex flex-col overflow-y-auto">
+    <div className="w-full h-full min-h-0 min-w-0 max-w-full bg-[#09090b] text-zinc-100 flex flex-col overflow-y-auto overflow-x-hidden">
       {/* Top Minimal Navigation Bar (shadcn style) */}
       <header className="border-b border-zinc-800 bg-[#09090b]/80 backdrop-blur-sm sticky top-0 z-30 px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2.5 sm:gap-3">
@@ -306,7 +306,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* MINIMAL LIST VIEW (shadcn exact table design) */}
         {!loading && filteredInvoices.length > 0 && viewMode === 'list' && (
           <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950/50 shadow-xs">
-            <div className="overflow-x-auto">
+            <div className="min-w-0 max-w-full overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/40 text-zinc-400 font-medium uppercase tracking-wider text-[11px]">

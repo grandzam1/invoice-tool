@@ -1,0 +1,45 @@
+---
+description: Portal UI — data-driven values, shared components, mobile shell
+alwaysApply: true
+---
+
+# Portal UI
+
+## Data-driven values
+
+Never hardcode values that already exist as data (labels, prices, member fields, status text, theme colors, layout spacing). Pull from props, shared app data, theme/CSS variables, or a single config (`src/portal/tabs.ts` / host equivalent).
+
+- Colors → Tailwind semantic tokens (`primary`, `muted`, `destructive`) or CSS variables
+- Spacing and max-widths → shared layout config, not magic strings per page
+
+## Shared components first
+
+Never duplicate a UI pattern across files. Prefer kit primitives:
+
+- `FormField`, `SelectableCard`, `PageHero`, `CalloutCard`
+- `PortalPageHeader` / back control for focused screens
+
+Extract when a pattern is used (or will be used) on 2+ pages.
+
+## No horizontal overflow (mobile)
+
+- Shell: `min-w-0 max-w-full overflow-x-clip` on content wrappers
+- Wide tables: scroll inside a container (`overflow-x-auto`), never expand the page
+- Flex rows: `flex-col` on mobile, or `min-w-0` + `shrink` on long text
+
+## Mobile bottom bar (focused views)
+
+Show the bottom bar only on primary destinations, and only when the tab config has 2 or more items.
+
+Hide it on focused / detail flows so the task uses the full viewport.
+
+**Focused pages must have a back link** — top-left + centered title. Never leave browser-back as the only escape.
+
+## Toasts
+
+Neutral background. Green for success icon only; red/destructive for error icon only.
+
+## This project (invoice-tool)
+
+- The standalone invoice page (`/invoice/:id`) and the print page (`/invoices/:id/print`) stay outside `#portal-shell`. No tab bar, header, or shell padding on those screens.
+- Do not put invoice, template, or editor domain code into the portal kit files under `src/adapters/react/`.

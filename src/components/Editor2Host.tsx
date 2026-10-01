@@ -222,7 +222,7 @@ export function Editor2Host({
   if (!invoice) return null;
 
   return (
-    <div className="editor2-host min-h-0 min-w-0 flex-1 bg-[#F6F6FC]">
+    <div className="editor2-host h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-[#F6F6FC]">
       <iframe
         ref={bindFrame}
         title="Editor 2"
@@ -230,7 +230,7 @@ export function Editor2Host({
           echoRef.current = null;
           postHydrate();
         }}
-        className="h-full w-full border-0 bg-[#F6F6FC]"
+        className="block h-full w-full border-0 bg-[#F6F6FC]"
       />
     </div>
   );
